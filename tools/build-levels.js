@@ -103,18 +103,24 @@ const SPECS = [
   {
     name: '3 · The Switchyard',
     seed: 30313,
-    cols: 27, rows: 19, loop: 0.09,
-    lava: 8, plates: 2, spinners: 0, crushers: 2, chaser: false,
+    // Loosened after 500 generations produced no escape and a completely flat
+    // fitness curve. The population was reliably pressing both switches and
+    // then failing the return trip to the door across a near-perfect maze.
+    // More loops means more ways back, which is the leg that was impossible.
+    cols: 27, rows: 19, loop: 0.20,
+    lava: 5, plates: 2, spinners: 0, crushers: 1, chaser: false,
     note: 'Two switches, and the exit stays shut until BOTH are down. That '
         + 'means two long detours in the wrong direction before the goal is '
         + 'even reachable — the hardest thing in the project to learn, because '
-        + 'for most of a run walking away from the exit is the only right move.',
+        + 'for most of a run walking away from the exit is the only right move. '
+        + 'Getting both switches down takes a couple of hundred generations; '
+        + 'the walk back to the door takes longer.',
   },
   {
     name: '4 · The Machine',
     seed: 8899,
-    cols: 29, rows: 19, loop: 0.08,
-    lava: 12, plates: 1, spinners: 2, crushers: 3, chaser: false,
+    cols: 29, rows: 19, loop: 0.16,
+    lava: 9, plates: 1, spinners: 2, crushers: 2, chaser: false,
     note: 'A locked exit, spinning bars, patrolling crushers and lava, all in '
         + 'the same maze. Nothing here is new on its own; surviving all of it '
         + 'on one run is.',
@@ -122,12 +128,12 @@ const SPECS = [
   {
     name: '5 · The Labyrinth',
     seed: 4242424,
-    cols: 31, rows: 21, loop: 0.05,
-    lava: 16, plates: 3, spinners: 2, crushers: 3, chaser: true,
+    cols: 31, rows: 21, loop: 0.12,
+    lava: 14, plates: 3, spinners: 2, crushers: 3, chaser: true,
     note: 'Everything at once, at full size: three switches to find, a sealed '
         + 'exit, sixteen lava pools, spinners, crushers, and something hunting '
         + 'you the whole time. This is not meant to be beaten quickly, or '
-        + 'necessarily at all.',
+        + 'necessarily at all. Nothing has escaped it yet.',
   },
 ];
 
