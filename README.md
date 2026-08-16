@@ -34,9 +34,14 @@ Difficulty then climbs through nine tiers, adding one new thing at a time, so
 that when the escape rate falls off a cliff you can see what caused it:
 
 ```
-11x9 -> 13x9 -> 13x11 +lava -> 15x11 -> 15x11 +locked exit
-     -> 17x13 +crusher -> 19x13 -> 21x15 -> 23x15 +chaser -> 25x17
+11x9 -> 13x9 -> 13x11 +lava -> 15x11 -> 13x11 +locked exit
+     -> 15x11 -> 17x13 +crusher -> 19x13 +spinner -> 21x15
+     -> 23x15 +chaser -> 25x17
 ```
+
+Eleven tiers. Each new hazard arrives on its own before anything is stacked on
+top of it — the locked exit especially, since it is the first time running
+straight at the goal is the wrong move.
 
 A tier is cleared on a *sustained average* over several generations rather than
 one good maze — performance on a single maze being the thing we just stopped
@@ -44,18 +49,24 @@ caring about.
 
 ### How far it actually gets
 
-600 generations, 600 distinct mazes, default settings:
+400 generations, 400 distinct mazes, default settings:
 
 ```
-tier 1 at gen 0     tier 4 at gen 177
-tier 2 at gen 5     tier 5 at gen 215
-tier 3 at gen 21    ...and then it plateaus
+tier 1 at gen 0     tier 4 at gen 164
+tier 2 at gen 15    tier 5 at gen 249   (locked exit)
+tier 3 at gen 21    tier 6 at gen 283   (locked exit + lava)
 ```
 
-It settles on **tier 5 of 9** — 17x13 mazes with four lava pools and a
-patrolling crusher — holding roughly **5-13% escape on mazes it has never
-seen**. About one agent in ten walks into a brand new hazard maze and finds the
-exit. Reproduce with `node tools/train-endless.js 600`.
+So it generalises to unseen mazes with lava, and then to unseen mazes with a
+locked exit it has to find a plate for — which is the result worth having,
+because none of that can be memorised. It stalls on tier 6 at a low single-digit
+escape rate. Reproduce with `node tools/train-endless.js 400`.
+
+**The most interesting number in the project is the gap between two of them.**
+On the fixed hand-made plate level the population reaches 56% escape. On
+procedurally generated mazes with the same mechanic it manages a few percent.
+That difference is exactly what a fixed maze hides: on one map the agents learn
+"the plate is over *there*", a memorised location worth nothing anywhere else.
 
 Getting past that plateau is an open problem and a good place to start poking.
 One obvious idea already did not work: giving the brain more working memory.
@@ -83,6 +94,7 @@ Drag to orbit, scroll to zoom.
 | **Orange** | lava. Standing on it kills. Jumping over it does not |
 | **Black gaps** | void. No floor at all — a missed jump falls forever |
 | **Red blocks** | crushers, patrolling a fixed line. Short enough to hurdle |
+| **Magenta bars** | spinners, sweeping a circle on a fixed rhythm. There is a gap between the arms |
 | **Pink block** | the chaser. It comes for whoever is nearest, and it is too tall to jump |
 | **Green beacon** | the exit |
 | **White dots** | the leader's route, including the arc of every jump |
@@ -256,6 +268,7 @@ exactly one `S` and at least one reachable `G`:
   movers: [
     { kind: 'crusher', from: [3, 1], to: [3, 3], speed: 0.07, phase: 0.5 },
     { kind: 'chaser',  at: [8, 2], speed: 0.085 },
+    { kind: 'spinner', at: [5, 2], arms: 3, reach: 1.5, speed: 0.035 },
   ],
 },
 ```
@@ -278,8 +291,8 @@ node tools/validate-levels.js
 ```
 
 which confirms every level parses, has a start and a reachable goal, that no
-hazard is parked inside a wall, and that no crusher's patrol line runs through
-one on its way — and prints the shortest path length so you can slot the level
+hazard is parked inside a wall, that no crusher's patrol line runs through one
+on its way, and that no spinner's circle sweeps through one — and prints the shortest path length so you can slot the level
 in at the right difficulty. That last check is not hypothetical: it caught a
 crusher sliding through a wall in this very repo.
 

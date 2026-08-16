@@ -178,6 +178,7 @@ const COLOUR = {
   plateDone: [0.42, 0.50, 0.38],
   door:      [0.85, 0.60, 0.22],
   crusher:   [0.95, 0.30, 0.36],
+  spinner:   [0.78, 0.36, 0.95],
   chaser:    [1.00, 0.16, 0.42],
   trail:     [0.70, 0.78, 0.95],
   eye:       [1.00, 1.00, 1.00],
@@ -499,8 +500,13 @@ class Renderer3D {
 
     // --- hazards ---
     for (const m of world.movers) {
-      const c = m.kind === 'chaser' ? COLOUR.chaser : COLOUR.crusher;
-      this._box(m.x, m.height / 2, m.y, m.radius * 2, m.height, m.radius * 2, c, 0.5);
+      const c = m.kind === 'chaser' ? COLOUR.chaser
+        : m.kind === 'spinner' ? COLOUR.spinner : COLOUR.crusher;
+      // Spinner blocks are turned to lie along their arm, so a pair of them
+      // reads as one sweeping bar instead of two unrelated cubes.
+      const yaw = m.kind === 'spinner' ? -m.angle : 0;
+      const long = m.kind === 'spinner' ? m.radius * 3.0 : m.radius * 2;
+      this._box(m.x, m.height / 2, m.y, long, m.height, m.radius * 2, c, 0.5, yaw);
     }
 
     // --- Albert, one hundred and twenty times over ---

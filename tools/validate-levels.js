@@ -35,7 +35,14 @@ for (const level of LEVELS) {
       maze.doors.length ? `${maze.plates.length}P/${maze.doors.length}D` : null,
       lava ? `${lava} lava` : null,
       voids ? `${voids} void` : null,
-      maze.movers.length ? `${maze.movers.length} ${maze.movers.map(m => m.kind).join('/')}` : null,
+      ...(() => {
+        // Group by kind — a spinner expands into several arm blocks, and
+        // listing each of them was unreadable.
+        const byKind = {};
+        for (const m of maze.movers) byKind[m.kind] = (byKind[m.kind] || 0) + 1;
+        return Object.entries(byKind).map(([k, n]) =>
+          k === 'spinner' ? `spinner (${n} arms)` : `${n} ${k}${n > 1 ? 's' : ''}`);
+      })(),
     ].filter(Boolean).join(', ') || 'no hazards';
     console.log(
       `✓ ${level.name.padEnd(18)} ${String(maze.w).padStart(3)}x${String(maze.h).padEnd(3)}` +

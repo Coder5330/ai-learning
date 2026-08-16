@@ -123,7 +123,27 @@ const LEVELS = [
     ],
   },
   {
-    name: '7 · The Knot',
+    name: '7 · Spinners',
+    note: 'Two rotating bars sweeping an open room. There is a gap between the arms and it comes round on a fixed rhythm, so this is pure timing — the arms are low enough to hurdle if you would rather not wait.',
+    rows: [
+      '###################',
+      '#S................#',
+      '#.................#',
+      '#.................#',
+      '#.................#',
+      '#.................#',
+      '#.................#',
+      '#.................#',
+      '#................G#',
+      '###################',
+    ],
+    movers: [
+      { kind: 'spinner', at: [6, 4], arms: 3, reach: 1.5, speed: 0.035, phase: 0 },
+      { kind: 'spinner', at: [13, 4], arms: 3, reach: 1.5, speed: 0.045, phase: 1.0 },
+    ],
+  },
+  {
+    name: '8 · The Knot',
     note: 'No hazards at all — just a real maze, with dead ends and one long correct route. Everything up to here could be solved by running at the exit and jumping; this cannot.',
     rows: [
       '#####################',
@@ -144,7 +164,7 @@ const LEVELS = [
     ],
   },
   {
-    name: '8 · Hot Warren',
+    name: '9 · Hot Warren',
     note: 'Navigation and survival at the same time, which is a far bigger ask than either alone. Lava in two corridors and a crusher sweeping the final approach — there are ways round both, which is the only reason this is learnable at all.',
     rows: [
       '#####################',
@@ -168,7 +188,7 @@ const LEVELS = [
     ],
   },
   {
-    name: '9 · The Switch',
+    name: '10 · The Switch',
     note: 'The exit is sealed behind a door, and running at it gets you nothing. Somewhere off to the side is a pressure plate — and the door opens only for the agent that stood on it, so one lucky discovery does not let the other 119 through. Learning to walk away from the goal in order to reach it is the hardest lesson here.',
     rows: [
       '#################',
@@ -183,7 +203,7 @@ const LEVELS = [
     ],
   },
   {
-    name: '10 · The Hunt',
+    name: '11 · The Hunt',
     note: 'The finale: a big loopy maze, a pool of lava in the middle of it, and something that hunts you. The chaser goes for whichever agent is nearest, so no two runs are alike.',
     rows: [
       '#########################',
@@ -209,7 +229,7 @@ const LEVELS = [
     ],
   },
   {
-    name: '11 · The Long Dark  (unsolved)',
+    name: '12 · The Long Dark  (unsolved)',
     note: 'Nothing has ever escaped this one. 200+ generations of training get less than halfway, with or without the chaser, and raising the give-up cutoff does not help either — the maze is simply longer than anything the current setup can hold a plan for. Left in as a standing challenge: beat it and you have found something the defaults are missing.',
     rows: [
       '###############################',

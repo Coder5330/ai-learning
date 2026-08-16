@@ -223,6 +223,50 @@ function addDoor(grid, rng) {
 }
 
 /**
+ * Carve a small chamber and set a spinner turning in it.
+ *
+ * A spinner needs a clear circle, and a maze made of one-cell corridors never
+ * has one — so we make one. Clearing walls can only ever join regions
+ * together, never separate them, so this cannot strand part of the maze; the
+ * only things it must not erase are the start, the exit, the plate and the
+ * door. Returns null if it could not find a spot.
+ */
+function addSpinner(grid, rng) {
+  const g = grid.map(r => r.split(''));
+  const h = g.length, w = g[0].length;
+  const protectedTile = c => c === 'S' || c === 'G' || c === 'P' || c === 'D';
+
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const cx = 3 + ((rng() * (w - 6)) | 0);
+    const cy = 3 + ((rng() * (h - 6)) | 0);
+    if (cx < 3 || cy < 3 || cx > w - 4 || cy > h - 4) continue;
+
+    let clash = false;
+    for (let y = cy - 2; y <= cy + 2 && !clash; y++) {
+      for (let x = cx - 2; x <= cx + 2; x++) {
+        if (protectedTile(g[y][x])) { clash = true; break; }
+      }
+    }
+    if (clash) continue;
+    if (Math.abs(cx - 1) + Math.abs(cy - 1) < 5) continue;   // not on the doorstep
+
+    for (let y = cy - 2; y <= cy + 2; y++) {
+      for (let x = cx - 2; x <= cx + 2; x++) {
+        if (g[y][x] === '#' || g[y][x] === '~') g[y][x] = '.';
+      }
+    }
+    return {
+      rows: g.map(r => r.join('')),
+      mover: {
+        kind: 'spinner', at: [cx, cy], arms: 2 + ((rng() * 2) | 0),
+        reach: 1.35, speed: 0.03 + rng() * 0.025, phase: rng() * Math.PI * 2,
+      },
+    };
+  }
+  return null;
+}
+
+/**
  * The difficulty ladder. Size grows, loops disappear, then hazards arrive one
  * kind at a time — so when the escape rate falls off a cliff you can see
  * exactly which new thing caused it.
@@ -239,10 +283,10 @@ const TIERS = [
   { cols: 13, rows: 11, loop: 0.26, lava: 0, crushers: 0, chaser: false, door: true },
   { cols: 15, rows: 11, loop: 0.22, lava: 2, crushers: 0, chaser: false, door: true },
   { cols: 17, rows: 13, loop: 0.20, lava: 4, crushers: 1, chaser: false, door: true },
-  { cols: 19, rows: 13, loop: 0.18, lava: 5, crushers: 1, chaser: false, door: true },
-  { cols: 21, rows: 15, loop: 0.16, lava: 6, crushers: 2, chaser: false, door: true },
-  { cols: 23, rows: 15, loop: 0.14, lava: 7, crushers: 2, chaser: true,  door: true },
-  { cols: 25, rows: 17, loop: 0.12, lava: 8, crushers: 3, chaser: true,  door: true },
+  { cols: 19, rows: 13, loop: 0.18, lava: 5, crushers: 1, chaser: false, door: true, spinners: 1 },
+  { cols: 21, rows: 15, loop: 0.16, lava: 6, crushers: 2, chaser: false, door: true, spinners: 1 },
+  { cols: 23, rows: 15, loop: 0.14, lava: 7, crushers: 2, chaser: true,  door: true, spinners: 2 },
+  { cols: 25, rows: 17, loop: 0.12, lava: 8, crushers: 3, chaser: true,  door: true, spinners: 2 },
 ];
 
 /** A one-line description of what a tier throws at you. */
@@ -251,6 +295,7 @@ function describeTier(i) {
   const bits = [`${t.cols}×${t.rows}`];
   if (t.door) bits.push('a locked exit');
   if (t.lava) bits.push(`${t.lava} lava`);
+  if (t.spinners) bits.push(`${t.spinners} spinner${t.spinners > 1 ? 's' : ''}`);
   if (t.crushers) bits.push(`${t.crushers} crusher${t.crushers > 1 ? 's' : ''}`);
   if (t.chaser) bits.push('a chaser');
   return bits.join(' · ');
@@ -271,6 +316,14 @@ function proceduralLevel(tierIndex, seed) {
   if (t.lava) rows = addLava(rows, t.lava, rng);
 
   const movers = [];
+  // Spinners first: they carve their own chamber, and a crusher lane found
+  // afterwards should be allowed to use the space they opened up.
+  for (let i = 0; i < (t.spinners || 0); i++) {
+    const spun = addSpinner(rows, rng);
+    if (!spun) break;
+    rows = spun.rows;
+    movers.push(spun.mover);
+  }
   if (t.crushers) {
     const lanes = findCrusherLanes(rows, 5);
     for (let i = 0; i < t.crushers && lanes.length; i++) {

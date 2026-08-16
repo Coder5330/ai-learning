@@ -29,13 +29,14 @@ const CHAR_TO_TILE = {
   'G': TILE.FLOOR,
 };
 
-/** A crusher or a chaser, with live position. */
+/** A crusher, a chaser, or one arm of a spinner, with live position. */
 class Mover {
   constructor(spec) {
-    this.kind = spec.kind;                    // 'crusher' | 'chaser'
+    this.kind = spec.kind;                    // 'crusher' | 'chaser' | 'spinner'
     this.speed = spec.speed || 0.05;
     this.radius = spec.radius || 0.34;
-    // Crushers are short enough to hurdle if you time it. Chasers are not.
+    // Crushers and spinner arms are short enough to hurdle if you time it.
+    // Chasers are not.
     this.height = spec.height || (spec.kind === 'chaser' ? 0.95 : 0.5);
     this.spec = spec;
     this.reset();
@@ -43,6 +44,15 @@ class Mover {
 
   reset() {
     const s = this.spec;
+    if (this.kind === 'spinner') {
+      this.cx = s.at[0] + 0.5;
+      this.cy = s.at[1] + 0.5;
+      this.arm = s.arm;                    // how far out this arm sits
+      this.angle = s.phase || 0;
+      this.x = this.cx + Math.cos(this.angle) * this.arm;
+      this.y = this.cy + Math.sin(this.angle) * this.arm;
+      return;
+    }
     if (this.kind === 'crusher') {
       this.ax = s.from[0] + 0.5; this.ay = s.from[1] + 0.5;
       this.bx = s.to[0] + 0.5;   this.by = s.to[1] + 0.5;
@@ -60,6 +70,14 @@ class Mover {
 
   /** @param agents living agents, so a chaser has something to chase */
   step(world, agents) {
+    if (this.kind === 'spinner') {
+      // No wall checks: a spinner's orbit is validated when the level loads,
+      // so it can sweep its circle without ever needing to look.
+      this.angle += this.speed;
+      this.x = this.cx + Math.cos(this.angle) * this.arm;
+      this.y = this.cy + Math.sin(this.angle) * this.arm;
+      return;
+    }
     if (this.kind === 'crusher') {
       const len = Math.hypot(this.bx - this.ax, this.by - this.ay) || 1;
       this.t += (this.dir * this.speed) / len;
@@ -114,7 +132,25 @@ class World {
       }
     }
 
-    this.movers = (level.movers || []).map(s => new Mover(s));
+    // A spinner is written as one entry but is really several arms sharing a
+    // centre, evenly spaced so there is a gap to time your run through.
+    this.movers = [];
+    for (const spec of level.movers || []) {
+      if (spec.kind !== 'spinner') { this.movers.push(new Mover(spec)); continue; }
+      const arms = spec.arms || 2;
+      const reach = spec.reach || 1.4;
+      for (let i = 0; i < arms; i++) {
+        const base = (spec.phase || 0) + (i / arms) * Math.PI * 2;
+        // Two blocks per arm, so an arm reads as a bar rather than a dot.
+        for (const frac of [0.55, 1.0]) {
+          this.movers.push(new Mover({
+            kind: 'spinner', at: spec.at, arm: reach * frac,
+            speed: spec.speed || 0.035, phase: base,
+            radius: spec.radius || 0.3, height: spec.height,
+          }));
+        }
+      }
+    }
 
     // Two rulers, because there are two jobs. `dist` measures the way out with
     // the doors open; `distPlate` measures the way to the nearest plate with
@@ -320,8 +356,24 @@ class World {
     }
     for (const m of this.movers) {
       const cells = m.kind === 'crusher' ? [m.spec.from, m.spec.to] : [m.spec.at];
+      if (m.kind === 'spinner') { /* checked by sweep below */ } else
       for (const [cx, cy] of cells) {
         if (this.isWall(cx, cy)) problems.push(`a ${m.kind} is parked inside a wall at ${cx},${cy}`);
+      }
+      // A spinner sweeps a circle, so the whole circle has to be clear.
+      if (m.kind === 'spinner') {
+        const steps = 32;
+        for (let i = 0; i < steps; i++) {
+          const a = (i / steps) * Math.PI * 2;
+          const px = m.cx + Math.cos(a) * m.arm;
+          const py = m.cy + Math.sin(a) * m.arm;
+          if (this.isWall(Math.floor(px), Math.floor(py))) {
+            problems.push(`a spinner at ${m.spec.at} sweeps through the wall at `
+              + `${Math.floor(px)},${Math.floor(py)}`);
+            break;
+          }
+        }
+        continue;
       }
       // Endpoints being clear is not enough — a crusher travels in a straight
       // line and will happily slide through anything in between, so walk the
