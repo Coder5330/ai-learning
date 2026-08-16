@@ -174,6 +174,9 @@ const COLOUR = {
   leader:    [1.00, 1.00, 1.00],
   escaped:   [0.27, 0.88, 0.66],
   dead:      [0.28, 0.31, 0.38],
+  plate:     [1.00, 0.82, 0.25],
+  plateDone: [0.42, 0.50, 0.38],
+  door:      [0.85, 0.60, 0.22],
   crusher:   [0.95, 0.30, 0.36],
   chaser:    [1.00, 0.16, 0.42],
   trail:     [0.70, 0.78, 0.95],
@@ -444,13 +447,30 @@ class Renderer3D {
     this.resize();
     this.count = 0;
 
+    // Doors are a per-agent idea, so the scene shows the leader's version of
+    // events: if he has found a plate, his doors are the ones drawn open.
+    const doorsOpen = leader ? leader.doorsOpen : false;
+
     // --- level geometry ---
     for (let cy = 0; cy < world.h; cy++) {
       for (let cx = 0; cx < world.w; cx++) {
         const t = world.tileAt(cx, cy);
         const x = cx + 0.5, z = cy + 0.5;
         if (t === TILE.VOID) continue;                       // the hole is the point
-        if (t === TILE.WALL) {
+        if (t === TILE.PLATE) {
+          // Sinks and goes dull once it has been stepped on.
+          this._box(x, doorsOpen ? -0.09 : -0.03, z, 0.82, doorsOpen ? 0.06 : 0.18, 0.82,
+            doorsOpen ? COLOUR.plateDone : COLOUR.plate, doorsOpen ? 0 : 1);
+          this._box(x, -0.06, z, 1, 0.12, 1, COLOUR.floorAlt, 0);
+        } else if (t === TILE.DOOR) {
+          if (doorsOpen) {
+            // Retracted into the floor, so you can see where it used to be.
+            this._box(x, -0.02, z, 1, 0.14, 1, COLOUR.door, 0.35);
+          } else {
+            this._box(x, 0.5, z, 1, 1, 1, COLOUR.door, 0.25);
+            this._box(x, 1.02, z, 1.0, 0.06, 1.0, COLOUR.plate, 0.4);
+          }
+        } else if (t === TILE.WALL) {
           this._box(x, 0.5, z, 1, 1, 1, COLOUR.wall, 0);
           // A slightly brighter cap, so a wall reads as a wall from above.
           this._box(x, 1.02, z, 1.0, 0.05, 1.0, COLOUR.wallTop, 0);

@@ -16,13 +16,15 @@
  * third axis, z, with the floor at 0 and walls one unit tall.
  */
 
-const TILE = { WALL: 0, FLOOR: 1, LAVA: 2, VOID: 3 };
+const TILE = { WALL: 0, FLOOR: 1, LAVA: 2, VOID: 3, PLATE: 4, DOOR: 5 };
 
 const CHAR_TO_TILE = {
   '#': TILE.WALL,
   '.': TILE.FLOOR,
   '~': TILE.LAVA,
   ' ': TILE.VOID,
+  'P': TILE.PLATE,
+  'D': TILE.DOOR,
   'S': TILE.FLOOR,
   'G': TILE.FLOOR,
 };
@@ -80,8 +82,10 @@ class Mover {
     const ang = Math.atan2(target.y - this.y, target.x - this.x);
     const nx = this.x + Math.cos(ang) * this.speed;
     const ny = this.y + Math.sin(ang) * this.speed;
-    if (!world.blocked(nx, this.y, this.radius)) this.x = nx;
-    if (!world.blocked(this.x, ny, this.radius)) this.y = ny;
+    // Doors are solid to hazards. They are a per-agent idea, but a chaser
+    // strolling through one would look like a bug even though it isn't.
+    if (!world.blocked(nx, this.y, this.radius, false)) this.x = nx;
+    if (!world.blocked(this.x, ny, this.radius, false)) this.y = ny;
   }
 }
 
@@ -95,6 +99,8 @@ class World {
     this.tiles = new Uint8Array(this.w * this.h);
     this.start = null;
     this.goals = [];
+    this.plates = [];
+    this.doors = [];
 
     for (let y = 0; y < this.h; y++) {
       for (let x = 0; x < this.w; x++) {
@@ -103,13 +109,27 @@ class World {
         this.tiles[y * this.w + x] = t === undefined ? TILE.WALL : t;
         if (c === 'S') this.start = { x: x + 0.5, y: y + 0.5, cx: x, cy: y };
         if (c === 'G') this.goals.push({ cx: x, cy: y });
+        if (c === 'P') this.plates.push({ cx: x, cy: y });
+        if (c === 'D') this.doors.push({ cx: x, cy: y });
       }
     }
 
     this.movers = (level.movers || []).map(s => new Mover(s));
 
-    this.dist = this._buildDistanceField();
+    // Two rulers, because there are two jobs. `dist` measures the way out with
+    // the doors open; `distPlate` measures the way to the nearest plate with
+    // them still shut. An agent that has not found a plate yet is scored on
+    // the second and then handed over to the first — which is how a goal it
+    // cannot see becomes a gradient it can climb.
+    this.dist = this._buildDistanceField(this.goals, true);
+    this.distPlate = this.plates.length
+      ? this._buildDistanceField(this.plates, false)
+      : null;
+
     this.startDist = this.start ? this.distAt(this.start.cx, this.start.cy) : Infinity;
+    this.startPlateDist = this.start && this.distPlate
+      ? this.distPlate[this.start.cy * this.w + this.start.cx]
+      : Infinity;
     this.openCells = this.tiles.reduce((n, t) => n + (t === TILE.WALL ? 0 : 1), 0);
   }
 
@@ -129,6 +149,30 @@ class World {
 
   isWall(cx, cy) { return this.tileAt(cx, cy) === TILE.WALL; }
 
+  /** Solid right now, for someone whose doors are open (or not). */
+  blocks(cx, cy, doorsOpen) {
+    const t = this.tileAt(cx, cy);
+    if (t === TILE.WALL) return true;
+    return t === TILE.DOOR && !doorsOpen;
+  }
+
+  plateDistAt(cx, cy) {
+    if (!this.distPlate) return Infinity;
+    if (cx < 0 || cy < 0 || cx >= this.w || cy >= this.h) return Infinity;
+    return this.distPlate[cy * this.w + cx];
+  }
+
+  /** Nearest plate centre, for the "which way is the objective" sense. */
+  nearestPlate(x, y) {
+    let best = null, bestD = Infinity;
+    for (const p of this.plates) {
+      const dx = p.cx + 0.5 - x, dy = p.cy + 0.5 - y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }
+
   /**
    * Height of the ground in a cell, or -Infinity where there is none.
    * Lava is at floor level — it is walkable, it just kills you.
@@ -138,6 +182,8 @@ class World {
     if (t === TILE.VOID) return -Infinity;
     return 0;
   }
+
+  isPlate(cx, cy) { return this.tileAt(cx, cy) === TILE.PLATE; }
 
   /**
    * Flood fill outward from the goal, so every open cell knows how many steps
@@ -152,10 +198,10 @@ class World {
    * measuring who got closer. Straight-line distance would be a bad ruler — in
    * a maze the wall beside the goal is "close" and completely useless.
    */
-  _buildDistanceField() {
+  _buildDistanceField(sources, doorsOpen) {
     const d = new Float64Array(this.w * this.h).fill(Infinity);
     const queue = [];
-    for (const g of this.goals) {
+    for (const g of sources) {
       d[g.cy * this.w + g.cx] = 0;
       queue.push(g.cy * this.w + g.cx);
     }
@@ -165,7 +211,7 @@ class World {
       const cx = idx % this.w, cy = (idx / this.w) | 0;
       for (const [dx, dy] of dirs) {
         const nx = cx + dx, ny = cy + dy;
-        if (this.isWall(nx, ny)) continue;
+        if (this.blocks(nx, ny, doorsOpen)) continue;
         const ni = ny * this.w + nx;
         if (d[ni] !== Infinity) continue;
         d[ni] = d[idx] + 1;
@@ -203,7 +249,7 @@ class World {
    * Standard DDA grid march — steps cell boundary to cell boundary, so cost is
    * proportional to how far the ray travels rather than to some step size.
    */
-  castRay(x, y, angle, maxRange) {
+  castRay(x, y, angle, maxRange, doorsOpen) {
     const dx = Math.cos(angle), dy = Math.sin(angle);
     let cx = Math.floor(x), cy = Math.floor(y);
 
@@ -220,18 +266,18 @@ class World {
     while (dist < maxRange) {
       if (sideX < sideY) { dist = sideX; sideX += deltaX; cx += stepX; }
       else { dist = sideY; sideY += deltaY; cy += stepY; }
-      if (this.isWall(cx, cy)) return Math.min(dist, maxRange);
+      if (this.blocks(cx, cy, doorsOpen)) return Math.min(dist, maxRange);
     }
     return maxRange;
   }
 
-  /** Does a circle of radius r at (x,y) overlap a wall? */
-  blocked(x, y, r) {
+  /** Does a circle of radius r at (x,y) overlap anything solid? */
+  blocked(x, y, r, doorsOpen) {
     const x0 = Math.floor(x - r), x1 = Math.floor(x + r);
     const y0 = Math.floor(y - r), y1 = Math.floor(y + r);
     for (let cy = y0; cy <= y1; cy++) {
       for (let cx = x0; cx <= x1; cx++) {
-        if (!this.isWall(cx, cy)) continue;
+        if (!this.blocks(cx, cy, doorsOpen)) continue;
         const nx = Math.max(cx, Math.min(x, cx + 1));
         const ny = Math.max(cy, Math.min(y, cy + 1));
         const ddx = x - nx, ddy = y - ny;
@@ -248,7 +294,13 @@ class World {
     if (!this.start) problems.push('no S (start)');
     if (this.rows.join('').split('S').length - 1 > 1) problems.push('more than one S');
     if (this.goals.length === 0) problems.push('no G (goal)');
-    if (this.start && this.startDist === Infinity) problems.push('goal is not reachable from the start');
+    if (this.start && this.startDist === Infinity) problems.push('goal is not reachable from the start (with the doors open)');
+    if (this.doors.length && !this.plates.length) {
+      problems.push(`${this.doors.length} door(s) but no plate to open them`);
+    }
+    if (this.plates.length && this.start && this.startPlateDist === Infinity) {
+      problems.push('no plate is reachable from the start with the doors shut');
+    }
     if (this.start && this.tileAt(this.start.cx, this.start.cy) !== TILE.FLOOR) {
       problems.push('the start is not on solid floor');
     }

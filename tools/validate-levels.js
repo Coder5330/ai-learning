@@ -32,6 +32,7 @@ for (const level of LEVELS) {
       if (t === TILE.VOID) voids++;
     }
     const hazards = [
+      maze.doors.length ? `${maze.plates.length}P/${maze.doors.length}D` : null,
       lava ? `${lava} lava` : null,
       voids ? `${voids} void` : null,
       maze.movers.length ? `${maze.movers.length} ${maze.movers.map(m => m.kind).join('/')}` : null,

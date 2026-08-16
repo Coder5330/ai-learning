@@ -168,7 +168,22 @@ const LEVELS = [
     ],
   },
   {
-    name: '9 · The Hunt',
+    name: '9 · The Switch',
+    note: 'The exit is sealed behind a door, and running at it gets you nothing. Somewhere off to the side is a pressure plate — and the door opens only for the agent that stood on it, so one lucky discovery does not let the other 119 through. Learning to walk away from the goal in order to reach it is the hardest lesson here.',
+    rows: [
+      '#################',
+      '#S.....#........#',
+      '#.###..#..####..#',
+      '#...#..#..#..#..#',
+      '#...P..D..#.G...#',
+      '#...#..#..#..#..#',
+      '#.###..#..####..#',
+      '#......#........#',
+      '#################',
+    ],
+  },
+  {
+    name: '10 · The Hunt',
     note: 'The finale: a big loopy maze, a pool of lava in the middle of it, and something that hunts you. The chaser goes for whichever agent is nearest, so no two runs are alike.',
     rows: [
       '#########################',
@@ -194,7 +209,7 @@ const LEVELS = [
     ],
   },
   {
-    name: '10 · The Long Dark  (unsolved)',
+    name: '11 · The Long Dark  (unsolved)',
     note: 'Nothing has ever escaped this one. 200+ generations of training get less than halfway, with or without the chaser, and raising the give-up cutoff does not help either — the maze is simply longer than anything the current setup can hold a plan for. Left in as a standing challenge: beat it and you have found something the defaults are missing.',
     rows: [
       '###############################',

@@ -17,6 +17,7 @@ function inputCount(cfg) {
     + 1                        // own speed
     + 3                        // own height, vertical speed, feet on ground?
     + 3                        // nearest hazard: sin, cos, distance
+    + 1                        // are my doors open yet?
     + 1                        // bias
     + cfg.memory;              // what it chose to remember last tick
 }
@@ -69,8 +70,14 @@ class Agent {
     this.bumps = 0;
     this.jumps = 0;
 
+    // Doors start shut for everyone, unless the level has none at all.
+    this.doorsOpen = world.plates.length === 0;
+    this.pressedAt = -1;
+
     this.startDist = world.startDist;
     this.bestDist = this.startDist;   // closest approach to the exit so far
+    this.startPlateDist = world.startPlateDist;
+    this.bestPlateDist = this.startPlateDist;
     this.visited = new Set([world.start.cy * world.w + world.start.cx]);
 
     this.memory.fill(0);
@@ -97,7 +104,7 @@ class Agent {
     const stepA = cfg.rayCount > 1 ? cfg.rayFov / (cfg.rayCount - 1) : 0;
     for (let i = 0; i < cfg.rayCount; i++) {
       const a = this.angle - half + stepA * i;
-      const d = world.castRay(this.x, this.y, a, cfg.rayRange);
+      const d = world.castRay(this.x, this.y, a, cfg.rayRange, this.doorsOpen);
       inp[k++] = 1 - d / cfg.rayRange;
     }
 
@@ -113,10 +120,17 @@ class Agent {
       inp[k++] = t === TILE.VOID ? 1 : 0;
     }
 
-    // 3. Where the exit is, as the crow flies. Deliberately a weak hint: it
-    //    says "the goal is somewhere over there", not "go this way", and in a
-    //    maze it is usually pointing straight into a wall.
-    const g = world.nearestGoal(this.x, this.y);
+    // 3. Where the current objective is, as the crow flies. Deliberately a
+    //    weak hint: it says "it is somewhere over there", not "go this way",
+    //    and in a maze it usually points straight into a wall.
+    //
+    //    Note what this points AT. With the doors still shut the objective is
+    //    the plate, not the exit — so the same three inputs mean "find the
+    //    plate" and then "find the way out", and the network never has to
+    //    learn a separate sense for the sub-goal.
+    const g = (!this.doorsOpen && world.plates.length)
+      ? world.nearestPlate(this.x, this.y)
+      : world.nearestGoal(this.x, this.y);
     const gdx = g.cx + 0.5 - this.x, gdy = g.cy + 0.5 - this.y;
     const gdist = Math.hypot(gdx, gdy);
     let rel = Math.atan2(gdy, gdx) - this.angle;
@@ -150,6 +164,7 @@ class Agent {
       inp[k++] = 0; inp[k++] = 0; inp[k++] = 0;
     }
 
+    inp[k++] = this.doorsOpen ? 1 : -1;
     inp[k++] = 1; // bias
 
     for (let i = 0; i < cfg.memory; i++) inp[k++] = this.memory[i];
@@ -184,8 +199,8 @@ class Agent {
     const nx = this.x + Math.cos(this.angle) * this.speed;
     const ny = this.y + Math.sin(this.angle) * this.speed;
     let moved = false;
-    if (!world.blocked(nx, this.y, cfg.radius)) { this.x = nx; moved = true; }
-    if (!world.blocked(this.x, ny, cfg.radius)) { this.y = ny; moved = true; }
+    if (!world.blocked(nx, this.y, cfg.radius, this.doorsOpen)) { this.x = nx; moved = true; }
+    if (!world.blocked(this.x, ny, cfg.radius, this.doorsOpen)) { this.y = ny; moved = true; }
     if (!moved) this.bumps++;
 
     // --- vertical movement ---------------------------------------------------
@@ -221,6 +236,12 @@ class Agent {
       if (dx * dx + dy * dy < rr * rr) { this.kill(DEATH.CRUSHED); return; }
     }
 
+    // --- the plate -----------------------------------------------------------
+    if (!this.doorsOpen && world.isPlate(cx, cy)) {
+      this.doorsOpen = true;
+      this.pressedAt = this.ticks;
+    }
+
     // --- bookkeeping ---------------------------------------------------------
     this.visited.add(cy * world.w + cx);
     if (this.ticks % 4 === 0) this.trail.push(this.x, this.y, this.z);
@@ -229,6 +250,13 @@ class Agent {
     if (d < this.bestDist) {
       this.bestDist = d;
       this.ticksAtBest = this.ticks;
+    }
+    if (!this.doorsOpen) {
+      const p = world.plateDistAt(cx, cy);
+      if (p < this.bestPlateDist) {
+        this.bestPlateDist = p;
+        this.ticksAtBest = this.ticks;
+      }
     }
 
     if (world.isGoalCell(cx, cy) && this.grounded) {
@@ -259,8 +287,23 @@ class Agent {
    * approach the hazard at all, which is worse than dying occasionally.
    */
   score(maxTicks) {
-    const progress = (this.startDist - this.bestDist) / Math.max(1, this.startDist);
-    let f = Math.max(0, progress);
+    const toGoal = (this.startDist - this.bestDist) / Math.max(1, this.startDist);
+    let f;
+
+    if (this.world.plates.length) {
+      // Two phases, because the exit is unreachable until a plate is pressed
+      // and rewarding only "got closer to the exit" would be a sparse reward
+      // with nothing to climb. Finding the plate is worth the first half of
+      // the score; escaping afterwards is worth the second. The two halves
+      // are contiguous, so pressing the plate is never a step backwards.
+      const toPlate = (this.startPlateDist - this.bestPlateDist)
+        / Math.max(1, this.startPlateDist);
+      f = this.doorsOpen
+        ? 0.5 + 0.5 * Math.max(0, toGoal)
+        : 0.5 * Math.max(0, Math.min(1, toPlate));
+    } else {
+      f = Math.max(0, toGoal);
+    }
 
     if (this.reachedGoal) {
       // Escaped, and faster is better — this is what stops the population

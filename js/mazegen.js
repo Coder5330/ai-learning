@@ -108,7 +108,7 @@ function addLava(grid, count, rng) {
   while (placed < count && attempts < count * 60) {
     attempts++;
     const [x, y] = cells[(rng() * cells.length) | 0];
-    if (g[y][x] !== '.') continue;
+    if (g[y][x] !== '.') continue;          // never over a plate, door or goal
     if (Math.abs(x - sx) + Math.abs(y - sy) < 4) continue;
     if (g[y - 1][x] === '~' || g[y + 1][x] === '~'
       || g[y][x - 1] === '~' || g[y][x + 1] === '~') continue;
@@ -147,26 +147,104 @@ function findCrusherLanes(grid, minLength) {
 }
 
 /**
+ * Seal the goal behind a door, and drop a plate somewhere the agent can still
+ * reach without it.
+ *
+ * Cutting a random corridor does not work: with loops in the maze there is
+ * usually another way round, and the door ends up decorative. Sealing the goal
+ * itself is guaranteed to bite — every route in now runs through the door.
+ *
+ * Returns null if the attempt broke the maze (walling off a neighbour can
+ * strand part of it), and the caller just goes without.
+ */
+function addDoor(grid, rng) {
+  const h = grid.length, w = grid[0].length;
+
+  /** Flood fill from the start. `openDoors` decides whether 'D' is passable. */
+  const reach = (g, openDoors) => {
+    const ok = (x, y) => x >= 0 && y >= 0 && x < w && y < h
+      && g[y][x] !== '#' && (openDoors || g[y][x] !== 'D');
+    const seen = new Set(['1,1']);
+    const queue = [[1, 1]];
+    for (let i = 0; i < queue.length; i++) {
+      const [x, y] = queue[i];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+        if (!ok(nx, ny) || seen.has(key)) continue;
+        seen.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+    return { seen, cells: queue };
+  };
+
+  let goal = null;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) if (grid[y][x] === 'G') goal = [x, y];
+  }
+  if (!goal) return null;
+  const [gx, gy] = goal;
+
+  const neighbours = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+    .map(([dx, dy]) => [gx + dx, gy + dy])
+    .filter(([x, y]) => x > 0 && y > 0 && x < w - 1 && y < h - 1 && grid[y][x] !== '#');
+
+  // Try each neighbour as the doorway, in a random order.
+  const order = neighbours.slice();
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = (rng() * (i + 1)) | 0;
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  for (const pick of order) {
+    const g = grid.map(r => r.split(''));
+    for (const [x, y] of neighbours) {
+      g[y][x] = (x === pick[0] && y === pick[1]) ? 'D' : '#';
+    }
+
+    // Both halves of the contract, and the second one is easy to forget:
+    // the door has to SEAL the goal, and it also has to still OPEN onto it.
+    // Walling off the other neighbours can strand the doorway itself, which
+    // makes a maze that is unsolvable no matter what the agent does.
+    const shut = reach(g, false);
+    if (shut.seen.has(`${gx},${gy}`)) continue;
+    if (!reach(g, true).seen.has(`${gx},${gy}`)) continue;
+
+    const candidates = shut.cells.filter(([x, y]) => g[y][x] === '.'
+      && Math.abs(x - 1) + Math.abs(y - 1) > (w + h) / 5);
+    if (!candidates.length) continue;
+
+    const [px, py] = candidates[(rng() * candidates.length) | 0];
+    g[py][px] = 'P';
+    return g.map(r => r.join(''));
+  }
+
+  return null;
+}
+
+/**
  * The difficulty ladder. Size grows, loops disappear, then hazards arrive one
  * kind at a time — so when the escape rate falls off a cliff you can see
  * exactly which new thing caused it.
  */
 const TIERS = [
-  { cols: 11, rows: 9,  loop: 0.30, lava: 0, crushers: 0, chaser: false },
-  { cols: 13, rows: 9,  loop: 0.26, lava: 0, crushers: 0, chaser: false },
-  { cols: 13, rows: 11, loop: 0.24, lava: 2, crushers: 0, chaser: false },
-  { cols: 15, rows: 11, loop: 0.22, lava: 3, crushers: 0, chaser: false },
-  { cols: 17, rows: 13, loop: 0.20, lava: 4, crushers: 1, chaser: false },
-  { cols: 19, rows: 13, loop: 0.18, lava: 5, crushers: 1, chaser: false },
-  { cols: 21, rows: 15, loop: 0.16, lava: 6, crushers: 2, chaser: false },
-  { cols: 23, rows: 15, loop: 0.14, lava: 7, crushers: 2, chaser: true },
-  { cols: 25, rows: 17, loop: 0.12, lava: 8, crushers: 3, chaser: true },
+  { cols: 11, rows: 9,  loop: 0.30, lava: 0, crushers: 0, chaser: false, door: false },
+  { cols: 13, rows: 9,  loop: 0.26, lava: 0, crushers: 0, chaser: false, door: false },
+  { cols: 13, rows: 11, loop: 0.24, lava: 2, crushers: 0, chaser: false, door: false },
+  { cols: 15, rows: 11, loop: 0.22, lava: 3, crushers: 0, chaser: false, door: false },
+  { cols: 15, rows: 11, loop: 0.22, lava: 2, crushers: 0, chaser: false, door: true },
+  { cols: 17, rows: 13, loop: 0.20, lava: 4, crushers: 1, chaser: false, door: true },
+  { cols: 19, rows: 13, loop: 0.18, lava: 5, crushers: 1, chaser: false, door: true },
+  { cols: 21, rows: 15, loop: 0.16, lava: 6, crushers: 2, chaser: false, door: true },
+  { cols: 23, rows: 15, loop: 0.14, lava: 7, crushers: 2, chaser: true,  door: true },
+  { cols: 25, rows: 17, loop: 0.12, lava: 8, crushers: 3, chaser: true,  door: true },
 ];
 
 /** A one-line description of what a tier throws at you. */
 function describeTier(i) {
   const t = TIERS[Math.min(i, TIERS.length - 1)];
   const bits = [`${t.cols}×${t.rows}`];
+  if (t.door) bits.push('a locked exit');
   if (t.lava) bits.push(`${t.lava} lava`);
   if (t.crushers) bits.push(`${t.crushers} crusher${t.crushers > 1 ? 's' : ''}`);
   if (t.chaser) bits.push('a chaser');
@@ -182,6 +260,9 @@ function proceduralLevel(tierIndex, seed) {
   const rng = makeRng(seed);
 
   let rows = generateMaze(t.cols, t.rows, t.loop, rng);
+  // The door goes on before the lava, so lava never lands on the plate or in
+  // the doorway. If sealing the goal broke the maze, carry on without one.
+  if (t.door) rows = addDoor(rows, rng) || rows;
   if (t.lava) rows = addLava(rows, t.lava, rng);
 
   const movers = [];
