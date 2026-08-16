@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Learns To Escape</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <h1>AI learns to escape</h1>
+    <p class="sub">120 agents, no instructions, no map. Lava, crushers, and a long fall. Only the fastest breed.</p>
+  </header>
+
+  <main class="stage">
+    <canvas id="view"></canvas>
+    <div id="toast" class="toast" hidden></div>
+    <p id="gl-error" class="gl-error" hidden></p>
+    <p class="hint">drag to orbit · scroll to zoom</p>
+  </main>
+
+  <aside class="panel">
+
+    <section class="card stats">
+      <div class="stat big">
+        <span class="label">Generation</span>
+        <span class="value" id="s-gen">0</span>
+      </div>
+      <div class="stat">
+        <span class="label">Escaped, this run</span>
+        <span class="value" id="s-solved-now">0</span>
+      </div>
+      <div class="stat">
+        <span class="label">Escaped, last gen</span>
+        <span class="value" id="s-solved">0%</span>
+      </div>
+      <div class="stat">
+        <span class="label">Best fitness</span>
+        <span class="value" id="s-best">0.00</span>
+      </div>
+      <div class="stat">
+        <span class="label">Closest ever</span>
+        <span class="value" id="s-closest">—</span>
+      </div>
+      <div class="stat">
+        <span class="label">Fastest escape</span>
+        <span class="value" id="s-fastest">—</span>
+      </div>
+      <div class="stat">
+        <span class="label">Alive</span>
+        <span class="value" id="s-alive">0</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>How the last generation ended</h2>
+      <ul class="deaths" id="deaths"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Progress</h2>
+      <canvas id="chart" width="320" height="110"></canvas>
+      <p class="chart-key">
+        <span class="key key-best"></span> best
+        <span class="key key-avg"></span> average
+        <span class="key key-solve"></span> % escaped
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Level</h2>
+      <select id="level-select"></select>
+      <p class="note" id="level-note"></p>
+      <label class="check">
+        <input type="checkbox" id="opt-curriculum" checked>
+        <span>Level up automatically<em>keeps the same brains and moves on once the population can reliably escape</em></span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Controls</h2>
+      <div class="buttons">
+        <button id="btn-play" class="primary">Pause</button>
+        <button id="btn-skip">Skip gen</button>
+        <button id="btn-turbo">Turbo 25</button>
+        <button id="btn-reset" class="danger">Restart</button>
+      </div>
+
+      <label class="slider">
+        <span>Speed <b id="v-speed">4×</b></span>
+        <input type="range" id="opt-speed" min="1" max="60" value="4">
+      </label>
+
+      <label class="slider">
+        <span>Mutation rate <b id="v-mutrate">2.0%</b></span>
+        <input type="range" id="opt-mutrate" min="0" max="200" value="20">
+      </label>
+
+      <label class="slider">
+        <span>Mutation size <b id="v-mutsize">0.15</b></span>
+        <input type="range" id="opt-mutsize" min="1" max="100" value="15">
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Camera</h2>
+      <label class="check"><input type="checkbox" id="opt-follow"><span>Follow the leader</span></label>
+      <label class="check"><input type="checkbox" id="opt-trail" checked><span>Show the leader's route</span></label>
+      <button id="btn-recentre">Recentre</button>
+    </section>
+
+    <section class="card brain">
+      <h2>Brain</h2>
+      <canvas id="brainview" width="320" height="150"></canvas>
+      <p class="note" id="brain-note"></p>
+      <select id="opt-depth">
+        <option value="20,16,12" selected>5 layers — 20 · 16 · 12</option>
+        <option value="24,16">4 layers — 24 · 16</option>
+        <option value="20">3 layers — 20</option>
+      </select>
+      <p class="note">
+        Changing the shape starts the population over. On the big levels the
+        5-layer brain is the only one that has ever escaped in testing — but it
+        is slower off the line, so early on the shallow one looks better.
+      </p>
+    </section>
+
+  </aside>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/nn.js"></script>
+<script src="js/world.js"></script>
+<script src="js/agent.js"></script>
+<script src="js/ga.js"></script>
+<script src="js/render3d.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
