@@ -189,6 +189,29 @@ It prints ASCII ready to paste straight into `levels.js`. Add the lava yourself.
 
 ---
 
+## Putting it on the internet
+
+It is a static site — no server, no build step, no API. Any static host will
+take it as-is.
+
+**Vercel** (`vercel.json` is already in the repo, so it needs no setup):
+
+```sh
+npx vercel          # preview URL
+npx vercel --prod   # live
+```
+
+Or point Vercel at the GitHub repo from its dashboard and every push deploys
+itself. Pick "Other" as the framework — there is nothing to build.
+
+**GitHub Pages** works just as well and needs no third party: repo Settings →
+Pages → deploy from branch → pick the branch and `/ (root)`.
+
+Either way the whole thing is a few hundred KB of text, and all the computation
+happens in the visitor's browser.
+
+---
+
 ## Tuning it properly
 
 Watching the canvas and going "hmm, that looks better" will mislead you — the
