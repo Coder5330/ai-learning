@@ -75,15 +75,24 @@ const CONFIG = {
 };
 
 /**
- * How long a single run gets, in ticks. Scaled to the level so that the first
- * one is not given the same budget as the last — a fixed number would either
- * make the big arenas impossible or the small ones tediously slow.
+ * How long a single run gets, in ticks.
+ *
+ * The obvious formula — shortest path, times a fudge factor — is wrong, and
+ * wrong in a way that looks exactly like the level being too hard. An agent
+ * cannot walk the shortest path, because it does not know where the exit is;
+ * it has to explore, and exploring a maze costs time proportional to the
+ * number of cells in it, not to the length of the answer. On a 27x19 maze
+ * budgeted at 2.2x the direct route, the population was reaching within 13
+ * cells of the exit and then having the clock stopped on it, with all 120
+ * agents timing out every single generation.
+ *
+ * So the budget is the sum of two things: enough time to walk the real route
+ * (through every switch), plus enough to sweep most of the arena on the way.
  */
 function tickBudget(world, cfg) {
-  // routeLength, not startDist — on a level with a locked exit the journey is
-  // start → plate → door → exit, which can be more than twice as far as the
-  // exit looks.
-  return Math.round(world.routeLength / cfg.maxSpeed * 2.2) + 150;
+  const walk = world.routeLength * 1.5;      // the answer, with slack
+  const explore = world.openCells * 1.2;     // finding the answer
+  return Math.round((walk + explore) / cfg.maxSpeed) + 150;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
