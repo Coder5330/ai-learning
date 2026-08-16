@@ -85,6 +85,14 @@ class Population {
       solveRate: solved.length / ranked.length,
       bestTicks: solved.length ? Math.min(...solved.map(a => a.ticks)) : null,
       closest: Math.min(...ranked.map(a => a.bestDist)),
+      // How far through the switch-then-exit sequence the best agent got.
+      // On a level with doors, "closest to the exit" is close to meaningless —
+      // an agent two cells from the goal may be standing at a shut door with
+      // no way through, which reads as nearly winning when it is nothing of
+      // the sort.
+      switchesDown: this.world.plates.length
+        ? Math.max(...ranked.map(a => a.pressed.size))
+        : 0,
       deaths: ranked.reduce((acc, a) => {
         acc[a.death] = (acc[a.death] || 0) + 1;
         return acc;

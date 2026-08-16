@@ -255,6 +255,16 @@
       : Math.min(...pop.agents.map(a => a.bestDist));
     $('s-closest').textContent = closestEver === 0 ? 'the exit' : `${closestEver} cells`;
 
+    const nPlates = state.world.plates.length;
+    const switchRow = $('stat-switches');
+    switchRow.hidden = nPlates === 0;
+    if (nPlates) {
+      const down = last ? last.switchesDown : 0;
+      const el = $('s-switches');
+      el.textContent = `${down} / ${nPlates}`;
+      el.classList.toggle('good', down === nPlates);
+    }
+
     const times = pop.history.map(h => h.bestTicks).filter(v => v != null);
     $('s-fastest').textContent = times.length ? `${Math.min(...times)} ticks` : '—';
 
