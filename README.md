@@ -80,6 +80,12 @@ units and a wall is 1.0, so walls can never be hurdled; hang time carries it
 about 2.7 cells, so a two-cell gap is possible and a four-cell one is not.
 Crushers are half a unit tall and *can* be cleared. Chasers cannot.
 
+The nine arenas are graded, and the curriculum only moves the population up
+once it can reliably escape the one it is on — carrying its brains with it. The
+ladder matters more than it sounds: dropped straight into the big hazard maze
+from random weights, the population never escapes once in 250 generations. Fed
+the same maze after climbing to it, it gets there.
+
 There is **no backpropagation anywhere in this project**. Nothing computes a
 gradient or tells an agent what it should have done. Every agent runs the
 arena, gets a score, and the best ones become the parents of the next
@@ -134,7 +140,7 @@ exactly one `S` and at least one reachable `G`:
 
 ```js
 {
-  name: '9 · Your Arena',
+  name: '10 · Your Arena',
   note: 'Shown under the level picker.',
   rows: [
     '#############',
@@ -165,9 +171,11 @@ Then check it:
 node tools/validate-levels.js
 ```
 
-which confirms every level parses, has a start and a reachable goal, and that
-no hazard is parked inside a wall — and prints the shortest path length so you
-can slot it in at the right difficulty.
+which confirms every level parses, has a start and a reachable goal, that no
+hazard is parked inside a wall, and that no crusher's patrol line runs through
+one on its way — and prints the shortest path length so you can slot the level
+in at the right difficulty. That last check is not hypothetical: it caught a
+crusher sliding through a wall in this very repo.
 
 Or have a maze generated:
 
@@ -188,8 +196,8 @@ run-to-run variance is large. Train in the terminal instead:
 
 ```sh
 node tools/train.js              # level 1, 60 generations
-node tools/train.js 6 300        # level 6, 300 generations
-node tools/train.js 6 300 20     # ...with a single 20-neuron hidden layer
+node tools/train.js 8 300        # level 8, 300 generations
+node tools/train.js 8 300 20     # ...with a single 20-neuron hidden layer
 ```
 
 It prints a table per generation including the death breakdown, which is

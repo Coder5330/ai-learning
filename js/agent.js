@@ -132,21 +132,20 @@ class Agent {
     inp[k++] = this.grounded ? 1 : -1;
 
     // 5. The nearest hazard, in the same shape as the goal sense.
-    let mx = 0, my = 0, md = 1;
-    let best = Infinity;
+    let nearest = null, bestSq = Infinity;
     for (const m of world.movers) {
       const d = (m.x - this.x) ** 2 + (m.y - this.y) ** 2;
-      if (d < best) { best = d; mx = m.x; my = m.y; }
+      if (d < bestSq) { bestSq = d; nearest = m; }
     }
-    if (best < Infinity) {
-      const dist = Math.sqrt(best);
-      rel = Math.atan2(my - this.y, mx - this.x) - this.angle;
-      mx = Math.sin(rel); my = Math.cos(rel);
-      md = Math.min(1, dist / cfg.rayRange);
-      // near = 1, far = 0, so "something is right on top of me" is loud
-      inp[k++] = mx * (1 - md);
-      inp[k++] = my * (1 - md);
-      inp[k++] = 1 - md;
+    if (nearest) {
+      // Scaled by nearness rather than raw distance, so a hazard on the far
+      // side of the arena reads as nothing at all and one about to flatten you
+      // is the loudest thing in the vector.
+      const near = 1 - Math.min(1, Math.sqrt(bestSq) / cfg.rayRange);
+      rel = Math.atan2(nearest.y - this.y, nearest.x - this.x) - this.angle;
+      inp[k++] = Math.sin(rel) * near;
+      inp[k++] = Math.cos(rel) * near;
+      inp[k++] = near;
     } else {
       inp[k++] = 0; inp[k++] = 0; inp[k++] = 0;
     }

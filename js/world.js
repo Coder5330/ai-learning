@@ -46,7 +46,10 @@ class Mover {
       this.bx = s.to[0] + 0.5;   this.by = s.to[1] + 0.5;
       this.t = s.phase || 0;     // 0..1 along the patrol, ping-ponging
       this.dir = 1;
-      this.x = this.ax; this.y = this.ay;
+      // Place it where the phase says, not at the start of the line — a row
+      // of staggered crushers should be staggered from tick zero.
+      this.x = this.ax + (this.bx - this.ax) * this.t;
+      this.y = this.ay + (this.by - this.ay) * this.t;
     } else {
       this.x = s.at[0] + 0.5;
       this.y = s.at[1] + 0.5;
@@ -253,6 +256,22 @@ class World {
       const cells = m.kind === 'crusher' ? [m.spec.from, m.spec.to] : [m.spec.at];
       for (const [cx, cy] of cells) {
         if (this.isWall(cx, cy)) problems.push(`a ${m.kind} is parked inside a wall at ${cx},${cy}`);
+      }
+      // Endpoints being clear is not enough — a crusher travels in a straight
+      // line and will happily slide through anything in between, so walk the
+      // whole patrol and check it.
+      if (m.kind === 'crusher') {
+        const [ax, ay] = m.spec.from, [bx, by] = m.spec.to;
+        const steps = Math.ceil(Math.hypot(bx - ax, by - ay) * 4);
+        for (let i = 0; i <= steps; i++) {
+          const t = steps ? i / steps : 0;
+          const cx = Math.round(ax + (bx - ax) * t);
+          const cy = Math.round(ay + (by - ay) * t);
+          if (this.isWall(cx, cy)) {
+            problems.push(`a crusher's patrol from ${ax},${ay} to ${bx},${by} passes through the wall at ${cx},${cy}`);
+            break;
+          }
+        }
       }
     }
     return problems;
