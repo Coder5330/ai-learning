@@ -128,7 +128,7 @@ Open the browser console and you have `maze.state` to poke at —
 Each agent has a **five-layer neural network**:
 
 ```
-    34 inputs ──▶ 20 ──▶ 16 ──▶ 12 ──▶ 6 outputs      1318 weights
+    38 inputs ──▶ 20 ──▶ 16 ──▶ 12 ──▶ 6 outputs      1398 weights
                  tanh   tanh   tanh    tanh
                                          │
                           memory ◀───────┘
@@ -136,11 +136,12 @@ Each agent has a **five-layer neural network**:
 
 **In:** nine distance rays fanned out in front of it; five probes asking what
 the floor is made of a little way ahead (lava? hole? — two separate channels,
-because they want the same response but are different things); the straight-line
-direction and distance to *its current objective*; its own speed, height,
-vertical speed and whether its feet are down; the direction and distance of the
-nearest hazard; whether its doors are open yet; a bias; and three numbers it
-chose to remember on the previous tick.
+because they want the same response but are different things); four probes
+asking how heavily trodden the ground ahead, to each side and behind already
+is; the straight-line direction and distance to *its current objective*; its
+own speed, height, vertical speed and whether its feet are down; the direction
+and distance of the nearest hazard; whether its doors are open yet; a bias; and
+three numbers it chose to remember on the previous tick.
 
 **Out:** steering, throttle, jump, and those three memory values.
 
@@ -213,6 +214,30 @@ escape lands at generation 18 and holds 22%. At 10% — a perfectly ordinary
 setting for a smaller network — *nothing ever escaped*, in any of four runs. A
 deep brain takes well over a hundred weight changes per child at that rate,
 which wrecks a working strategy before selection can act on it.
+
+**Knowing where you have already been is worth more than anything else in
+here.** A person beats one of these mazes in a handful of tries, and the
+reason is not reflexes — it is that they remember try one. "That way was a
+dead end, take the other branch." Three floats of recurrent memory cannot hold
+that, so for a long time the population was not searching the maze, it was
+wandering it.
+
+Each agent now carries a visit count per cell and senses it through four
+probes: ahead, both sides, and behind. Not a map — just *have I been that way*.
+The Switchyard, 200 generations each, everything else identical:
+
+| | best fitness | switches pressed |
+|---|---|---|
+| trail sense on | **0.84** | **2 of 2** |
+| trail sense off | 0.41 | **0** |
+
+Without it the population never pressed a single switch. Not "pressed them
+slowly" — never, in 200 generations, and never in a separate 650-generation run
+either, where the fitness sat flat at 0.41 for six hundred generations. That
+0.41 was entirely the small exploration bonus; actual progress was zero.
+
+With it, both switches go down reliably. Four numbers, and they are the
+difference between a search and a random walk.
 
 **Memory earns its place. Depth, so far, does not.** The default brain is five
 layers because that is what was asked for, and it works — but on the level I
