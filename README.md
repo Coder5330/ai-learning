@@ -34,8 +34,8 @@ Difficulty then climbs through nine tiers, adding one new thing at a time, so
 that when the escape rate falls off a cliff you can see what caused it:
 
 ```
-11x9 -> 13x9 -> 13x11 +lava -> 15x11 -> 17x13 +crusher -> 19x13
-     -> 21x15 -> 23x15 +chaser -> 25x17
+11x9 -> 13x9 -> 13x11 +lava -> 15x11 -> 15x11 +locked exit
+     -> 17x13 +crusher -> 19x13 -> 21x15 -> 23x15 +chaser -> 25x17
 ```
 
 A tier is cleared on a *sustained average* over several generations rather than
@@ -111,7 +111,7 @@ Open the browser console and you have `maze.state` to poke at —
 Each agent has a **five-layer neural network**:
 
 ```
-    33 inputs ──▶ 20 ──▶ 16 ──▶ 12 ──▶ 6 outputs      1298 weights
+    34 inputs ──▶ 20 ──▶ 16 ──▶ 12 ──▶ 6 outputs      1318 weights
                  tanh   tanh   tanh    tanh
                                          │
                           memory ◀───────┘
@@ -120,9 +120,10 @@ Each agent has a **five-layer neural network**:
 **In:** nine distance rays fanned out in front of it; five probes asking what
 the floor is made of a little way ahead (lava? hole? — two separate channels,
 because they want the same response but are different things); the straight-line
-direction and distance to the exit; its own speed, height, vertical speed and
-whether its feet are down; the direction and distance of the nearest hazard; a
-bias; and three numbers it chose to remember on the previous tick.
+direction and distance to *its current objective*; its own speed, height,
+vertical speed and whether its feet are down; the direction and distance of the
+nearest hazard; whether its doors are open yet; a bias; and three numbers it
+chose to remember on the previous tick.
 
 **Out:** steering, throttle, jump, and those three memory values.
 
@@ -151,6 +152,25 @@ Fitness rewards getting closer to the exit — measured by flood-fill distance,
 so "close" means close *through the corridors*, not close as the crow flies —
 pays a large bonus for escaping, pays more the faster you escape, adds a tiny
 bonus for exploring, and subtracts a tiny amount for scraping along walls.
+
+### Locked doors, and the sparse-reward problem
+
+Once the exit is sealed behind a door, "got closer to the exit" is a useless
+signal: the exit is unreachable, so there is nothing to climb towards and
+evolution has no gradient at all. This is the classic sparse reward.
+
+The fix is two rulers instead of one. The world keeps a second distance field
+measuring the way to the nearest plate *with the doors still shut*. Finding the
+plate is worth the first half of an agent's score, escaping afterwards is worth
+the second, and the halves are contiguous so stepping on the plate is never a
+step backwards. The "where is my objective" sense retargets from the exit to
+the plate while the doors are shut, so the same three inputs serve both phases
+and the network needs no separate sense for the sub-goal — just one extra input
+telling it whether its doors are open.
+
+Doors are per agent, not global. All 120 share one maze, so a global door would
+mean one lucky agent finds the plate and the other 119 stroll through having
+learned nothing.
 
 ---
 
@@ -195,6 +215,15 @@ The dropdown under **Brain** switches depth live, and `node tools/train.js 8
 150 20` reproduces the third row. If you want the fastest learner rather than
 the deepest one, use it.
 
+**Nobody should be allowed to give up.** Agents that had not got closer in 140
+ticks used to be culled, as a speed optimisation — an agent that has stopped
+making progress is usually wedged in a corner. But backing out of a deep dead
+end looks exactly like being wedged, right up until the moment it pays off, so
+the cull was quietly binning the one behaviour a maze actually rewards.
+Removing it was expected to cost performance. Instead Endless mode reached tier
+4 at generation 55 rather than 177, and a 60-generation run still finishes in
+twelve seconds.
+
 **A curriculum is not optional.** Dropped straight into a big hazard maze from
 random weights, the population never escaped once in 250 generations. Fed the
 same maze after climbing to it, it gets there.
@@ -237,6 +266,8 @@ exactly one `S` and at least one reachable `G`:
 | `.` | floor |
 | `~` | lava — ground level, but standing on it kills |
 | ` ` | void — no floor at all |
+| `P` | pressure plate — stepping on it opens every door, for that agent |
+| `D` | door — solid until this agent has pressed a plate |
 | `S` | start (exactly one) |
 | `G` | goal |
 
