@@ -5,13 +5,68 @@ idea what lava is. Most of them drive into a wall. Some walk straight into the
 fire. The handful that got furthest have children, the children are mutated
 slightly, and it runs again.
 
-After a few dozen rounds they can cross a room. After a few hundred they can
-time a jump over a two-cell chasm, hurdle a moving crusher, and find the exit
-of a maze they have never seen.
+**And then the maze is thrown away and a new one is generated.** Every single
+generation. That is the part that matters.
 
 **Open `index.html` in a browser.** That is the whole setup — no build, no
 install, no server, no dependencies. Not even a 3D library: the renderer is
 about three hundred lines of WebGL in `js/render3d.js`.
+
+---
+
+## Why the maze changes every time
+
+On a fixed maze, evolution does not have to learn *how to solve a maze*. It can
+learn "left, then right, then left" — a memorised route worth nothing anywhere
+else. The population looks like it is getting cleverer and is really just
+overfitting to one map, and the escape rate mostly tells you how many
+generations it took to memorise the answer.
+
+So in **Endless mode** (the default) every generation gets a maze nobody has
+ever seen. A memorised route is worth exactly zero. The only thing selection
+can reward is general maze-solving, and the escape rate becomes an honest
+generalisation score, because it is measured entirely on unseen mazes.
+
+The number gets much *worse* when you do this. That is the point — it was
+always the real number.
+
+Difficulty then climbs through nine tiers, adding one new thing at a time, so
+that when the escape rate falls off a cliff you can see what caused it:
+
+```
+11x9 -> 13x9 -> 13x11 +lava -> 15x11 -> 17x13 +crusher -> 19x13
+     -> 21x15 -> 23x15 +chaser -> 25x17
+```
+
+A tier is cleared on a *sustained average* over several generations rather than
+one good maze — performance on a single maze being the thing we just stopped
+caring about.
+
+### How far it actually gets
+
+600 generations, 600 distinct mazes, default settings:
+
+```
+tier 1 at gen 0     tier 4 at gen 177
+tier 2 at gen 5     tier 5 at gen 215
+tier 3 at gen 21    ...and then it plateaus
+```
+
+It settles on **tier 5 of 9** — 17x13 mazes with four lava pools and a
+patrolling crusher — holding roughly **5-13% escape on mazes it has never
+seen**. About one agent in ten walks into a brand new hazard maze and finds the
+exit. Reproduce with `node tools/train-endless.js 600`.
+
+Getting past that plateau is an open problem and a good place to start poking.
+One obvious idea already did not work: giving the brain more working memory.
+Over 250 generations of Endless, 3 / 6 / 10 memory units all finished on tier 4
+or 5 at 7-10% mean escape, which is inside the run-to-run noise. Whatever the
+ceiling is, it is not memory capacity at these sizes.
+
+There is also a **Campaign** in the level picker: ten hand-made arenas from a
+single corridor up to a chaser maze, useful for watching one specific skill
+being learned. Level 10 has never been escaped by anything, and is left in
+deliberately as a standing challenge.
 
 ---
 
@@ -104,11 +159,17 @@ bonus for exploring, and subtracts a tiny amount for scraping along walls.
 All measured with `tools/train.js`, not guessed.
 
 **Crossover makes it worse, so it is off.** Breeding two brains by mixing their
-weights is the textbook move, and here it was actively harmful — first escape
-at generation ~23 with a 3% escape rate, versus generation ~9 and 36% with
-crossover disabled. Two networks can produce the same behaviour using
-completely different internal wiring, so a child built half from each inherits
-neither. Set `crossoverRate` in `js/config.js` if you want to watch it fail.
+weights is the textbook move and it was actively harmful here: first escape at
+generation 33 with crossover off against generation 42 with it on, and a 21%
+escape rate against 13%, over four runs each. Two networks can produce the same
+behaviour using completely different internal wiring, so a child built half
+from each inherits neither.
+
+**Mutation rate matters more than anything else.** At the 2% default, first
+escape lands at generation 18 and holds 22%. At 10% — a perfectly ordinary
+setting for a smaller network — *nothing ever escaped*, in any of four runs. A
+deep brain takes well over a hundred weight changes per child at that rate,
+which wrecks a working strategy before selection can act on it.
 
 **Memory earns its place. Depth, so far, does not.** The default brain is five
 layers because that is what was asked for, and it works — but on the level I
@@ -134,6 +195,10 @@ The dropdown under **Brain** switches depth live, and `node tools/train.js 8
 150 20` reproduces the third row. If you want the fastest learner rather than
 the deepest one, use it.
 
+**A curriculum is not optional.** Dropped straight into a big hazard maze from
+random weights, the population never escaped once in 250 generations. Fed the
+same maze after climbing to it, it gets there.
+
 **Punishing death made things worse.** An explicit fitness penalty for dying in
 lava made the population hug the far wall and refuse to approach the hazard at
 all — which scores worse than dying occasionally, because the exit is on the
@@ -144,12 +209,13 @@ is enough.
 
 ## Adding your own arenas
 
-Open `js/levels.js` and draw one. Every row must be the same length, with
+Endless mode generates its own — to change what it produces, edit `TIERS` in
+`js/mazegen.js`. To add a hand-made one, open `js/levels.js` and draw it. Every row must be the same length, with
 exactly one `S` and at least one reachable `G`:
 
 ```js
 {
-  name: '10 · Your Arena',
+  name: '11 · Your Arena',
   note: 'Shown under the level picker.',
   rows: [
     '#############',
@@ -227,9 +293,11 @@ Watching the canvas and going "hmm, that looks better" will mislead you — the
 run-to-run variance is large. Train in the terminal instead:
 
 ```sh
-node tools/train.js              # level 1, 60 generations
-node tools/train.js 8 300        # level 8, 300 generations
-node tools/train.js 8 300 20     # ...with a single 20-neuron hidden layer
+node tools/train-endless.js 600      # the honest one: unseen maze every generation
+node tools/train-endless.js 600 20   # ...with a single 20-neuron hidden layer
+
+node tools/train.js 8 300            # one fixed campaign level, 300 generations
+node tools/train.js 8 300 20         # ...with a single 20-neuron hidden layer
 ```
 
 It prints a table per generation including the death breakdown, which is
@@ -246,14 +314,16 @@ where it is non-obvious, why it is set the way it is.
 index.html               markup and the control panel
 css/style.css
 js/config.js             every tunable value, in one place
-js/levels.js             the arenas, as ASCII
+js/mazegen.js            procedural generation and the difficulty tiers
+js/levels.js             the hand-made campaign arenas, as ASCII
 js/nn.js                 the neural network
 js/world.js              tiles, hazards, raycasting, flood-fill distance
 js/agent.js              senses, movement, dying, scoring
 js/ga.js                 selection, mutation, generations
 js/render3d.js           the WebGL renderer, from scratch
 js/app.js                main loop, stats, the brain diagram
-tools/train.js           headless training, prints a table
+tools/train-endless.js   headless training on procedural mazes
+tools/train.js           headless training on one fixed level
 tools/gen-maze.js        maze generator
 tools/validate-levels.js
 ```
@@ -261,3 +331,9 @@ tools/validate-levels.js
 Nothing depends on anything you have to install. The `tools/` scripts need
 Node; the page itself needs a browser with WebGL2, which is anything from the
 last decade.
+
+---
+
+Inspired by [AI Warehouse](https://www.youtube.com/watch?v=M4AYM1XwJd4)'s maze
+series, which trains its agent across procedurally generated mazes rather than
+one fixed map — the detail this project was missing until it wasn't.
