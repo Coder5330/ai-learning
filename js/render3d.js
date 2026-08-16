@@ -111,18 +111,32 @@ in float vGlow;
 in vec3 vWorld;
 
 uniform float uTime;
+uniform vec3  uCamera;
+uniform vec3  uFogColor;
+uniform vec2  uFogRange;   // where fog starts, where it is total
 
 out vec4 fragColor;
 
 void main() {
   vec3 n = normalize(vNormal);
-  vec3 lightDir = normalize(vec3(0.42, 0.86, 0.28));
 
-  // One key light plus a hemisphere fill, so the tops of things read bright
-  // and the sides still have shape instead of going flat black.
-  float diff = max(dot(n, lightDir), 0.0);
-  float sky  = 0.5 + 0.5 * n.y;
-  vec3 base  = vColor * (0.24 + 0.28 * sky + 0.58 * diff);
+  // A warm key from one side and a cool fill from the other. Two coloured
+  // lights instead of one white one is most of the difference between "3D
+  // shapes" and "a scene" — the shaded sides pick up the fill's blue rather
+  // than just going dark.
+  vec3 key  = normalize(vec3(0.45, 0.80, 0.30));
+  vec3 fill = normalize(vec3(-0.55, 0.35, -0.45));
+
+  float kd = max(dot(n, key), 0.0);
+  float fd = max(dot(n, fill), 0.0);
+  float sky = 0.5 + 0.5 * n.y;
+
+  // A bright, evenly lit room. Most of the light is ambient so the white
+  // walls stay white and readable, with just enough directional shaping to
+  // keep the boxes from looking like flat stickers.
+  vec3 lit = vColor * (0.62 + 0.10 * sky)
+           + vColor * vec3(1.00, 0.98, 0.94) * 0.26 * kd
+           + vColor * vec3(0.72, 0.80, 1.00) * 0.14 * fd;
 
   if (vGlow > 0.01) {
     // Two sine waves at different rates, so the lava churns instead of
@@ -130,10 +144,14 @@ void main() {
     float ripple = 0.6 + 0.4
       * sin(uTime * 1.9 + vWorld.x * 3.1 + vWorld.z * 2.3)
       * sin(uTime * 1.1 + vWorld.z * 1.7 - vWorld.x * 0.9);
-    base = mix(base, vColor * (1.05 + 0.85 * ripple), vGlow);
+    lit = mix(lit, vColor * (1.05 + 0.85 * ripple), vGlow);
   }
 
-  fragColor = vec4(base, 1.0);
+  // Fade the far side of the arena into the background. Without this a big
+  // maze reads as a flat pattern; with it you can see which end is near.
+  float d = distance(vWorld, uCamera);
+  float fog = smoothstep(uFogRange.x, uFogRange.y, d);
+  fragColor = vec4(mix(lit, uFogColor, fog * 0.85), 1.0);
 }`;
 
 // -------------------------------------------------------------- cube mesh --
@@ -164,27 +182,40 @@ function cubeGeometry() {
 // ----------------------------------------------------------------- palette --
 
 const COLOUR = {
-  floor:     [0.20, 0.23, 0.30],
-  floorAlt:  [0.17, 0.20, 0.26],   // checker, so scale is readable
-  wall:      [0.30, 0.34, 0.44],
-  wallTop:   [0.38, 0.43, 0.55],
-  lava:      [1.00, 0.38, 0.10],
-  goal:      [0.27, 0.88, 0.66],
-  agent:     [0.39, 0.64, 1.00],
-  leader:    [1.00, 1.00, 1.00],
-  escaped:   [0.27, 0.88, 0.66],
-  dead:      [0.28, 0.31, 0.38],
+  // Bright room, dark floor. Clean white walls against charcoal tiles with
+  // light grout between them — the floor grid does the work of showing scale
+  // and speed that a checkerboard was doing badly.
+  floor:     [0.255, 0.262, 0.278],
+  floorAlt:  [0.230, 0.237, 0.252],
+  grout:     [0.760, 0.775, 0.800],
+  wall:      [0.940, 0.945, 0.955],
+  wallTop:   [0.995, 0.995, 1.000],
+  // Pushed well to the red side. Albert is orange, and at the same hue the
+  // agents standing next to a lava pool disappeared into it.
+  lava:      [0.94, 0.16, 0.05],
+  goal:      [0.20, 0.85, 0.32],
+  agent:     [1.00, 0.52, 0.10],   // Albert orange
+  leader:    [0.15, 0.42, 1.00],   // one vivid blue, so you can find him
+  escaped:   [0.16, 0.78, 0.38],
+  dead:      [0.55, 0.57, 0.60],
   plate:     [1.00, 0.82, 0.25],
   plateDone: [0.42, 0.50, 0.38],
   door:      [0.85, 0.60, 0.22],
-  crusher:   [0.95, 0.30, 0.36],
-  spinner:   [0.78, 0.36, 0.95],
+  crusher:   [0.90, 0.18, 0.22],
+  spinner:   [0.90, 0.18, 0.22],
+  spinnerB:  [0.16, 0.30, 0.88],   // arms alternate, as in the real thing
+  pivot:     [0.98, 0.98, 1.00],
   chaser:    [1.00, 0.16, 0.42],
-  trail:     [0.70, 0.78, 0.95],
+  trail:     [0.30, 0.62, 1.00],   // the leader's blue, so his route reads
+  shadow:    [0.10, 0.11, 0.13],
   eye:       [1.00, 1.00, 1.00],
-  pupil:     [0.06, 0.08, 0.13],
-  foot:      [0.18, 0.30, 0.52],
+  pupil:     [0.08, 0.08, 0.10],
+  foot:      [0.80, 0.36, 0.05],
 };
+
+/** Clear colour and fog colour, kept identical so the fade has nothing to
+ *  fade towards but the background itself. */
+const BACKDROP = new Float32Array([0.878, 0.890, 0.906]);
 
 const FLOATS_PER_INSTANCE = 11;
 
@@ -201,6 +232,9 @@ class Renderer3D {
     this.program = this._buildProgram(VERT, FRAG);
     this.uViewProj = gl.getUniformLocation(this.program, 'uViewProj');
     this.uTime = gl.getUniformLocation(this.program, 'uTime');
+    this.uCamera = gl.getUniformLocation(this.program, 'uCamera');
+    this.uFogColor = gl.getUniformLocation(this.program, 'uFogColor');
+    this.uFogRange = gl.getUniformLocation(this.program, 'uFogRange');
 
     const geo = cubeGeometry();
     this.indexCount = geo.idx.length;
@@ -452,6 +486,10 @@ class Renderer3D {
     // events: if he has found a plate, his doors are the ones drawn open.
     const doorsOpen = leader ? leader.doorsOpen : false;
 
+    // The slab everything sits on. Visible only in the seams between floor
+    // tiles, where it reads as grout.
+    this._box(world.w / 2, -0.075, world.h / 2, world.w, 0.13, world.h, COLOUR.grout, 0);
+
     // --- level geometry ---
     for (let cy = 0; cy < world.h; cy++) {
       for (let cx = 0; cx < world.w; cx++) {
@@ -476,10 +514,13 @@ class Renderer3D {
           // A slightly brighter cap, so a wall reads as a wall from above.
           this._box(x, 1.02, z, 1.0, 0.05, 1.0, COLOUR.wallTop, 0);
         } else if (t === TILE.LAVA) {
-          this._box(x, -0.06, z, 1, 0.12, 1, COLOUR.lava, 1);
+          this._box(x, -0.055, z, 1, 0.12, 1, COLOUR.lava, 1);
         } else {
-          const checker = (cx + cy) % 2 === 0 ? COLOUR.floor : COLOUR.floorAlt;
-          this._box(x, -0.06, z, 1, 0.12, 1, checker, 0);
+          // Slightly undersized, so the pale slab underneath shows through as
+          // grout. That grid is what makes movement legible — without it a
+          // flat floor gives the eye nothing to measure speed against.
+          const shade = (cx + cy) % 2 === 0 ? COLOUR.floor : COLOUR.floorAlt;
+          this._box(x, -0.06, z, 0.94, 0.12, 0.94, shade, 0);
         }
       }
     }
@@ -501,12 +542,35 @@ class Renderer3D {
     // --- hazards ---
     for (const m of world.movers) {
       const c = m.kind === 'chaser' ? COLOUR.chaser
-        : m.kind === 'spinner' ? COLOUR.spinner : COLOUR.crusher;
+        : m.kind === 'spinner' ? (m.tint ? COLOUR.spinnerB : COLOUR.spinner)
+        : COLOUR.crusher;
       // Spinner blocks are turned to lie along their arm, so a pair of them
       // reads as one sweeping bar instead of two unrelated cubes.
       const yaw = m.kind === 'spinner' ? -m.angle : 0;
       const long = m.kind === 'spinner' ? m.radius * 3.0 : m.radius * 2;
-      this._box(m.x, m.height / 2, m.y, long, m.height, m.radius * 2, c, 0.5, yaw);
+      this._box(m.x, m.height / 2, m.y, long, m.height, m.radius * 2, c, 0.15, yaw);
+    }
+    // One white hub at the centre of each spinner, so the arms read as a
+    // machine bolted to the floor rather than free-floating bars.
+    const hubs = new Set();
+    for (const m of world.movers) {
+      if (m.kind !== 'spinner') continue;
+      const key = `${m.cx},${m.cy}`;
+      if (hubs.has(key)) continue;
+      hubs.add(key);
+      this._box(m.cx, m.height * 0.55, m.cy, 0.42, m.height * 1.1, 0.42, COLOUR.pivot, 0);
+    }
+
+    // --- contact shadows ---
+    // A dark patch under each agent, shrinking as he rises. Without it you
+    // cannot tell a jumping agent from one further away, and the whole scene
+    // reads as cutouts floating over a floor.
+    for (const a of agents) {
+      if (!a.alive && !a.reachedGoal) continue;
+      if (world.tileAt(Math.floor(a.x), Math.floor(a.y)) === TILE.VOID) continue;
+      const lift = Math.max(0, Math.min(1, a.z));
+      const size = (a === leader ? 0.40 : 0.34) * (1 - lift * 0.45);
+      this._box(a.x, 0.012, a.y, size, 0.02, size, COLOUR.shadow, 0);
     }
 
     // --- Albert, one hundred and twenty times over ---
@@ -545,12 +609,17 @@ class Renderer3D {
     const viewProj = M4.multiply(proj, M4.lookAt(eye, this.target, [0, 1, 0]));
 
     // --- draw ---
-    gl.clearColor(0.035, 0.045, 0.065, 1);
+    gl.clearColor(BACKDROP[0], BACKDROP[1], BACKDROP[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.uViewProj, false, viewProj);
     gl.uniform1f(this.uTime, time);
+    gl.uniform3fv(this.uCamera, eye);
+    gl.uniform3fv(this.uFogColor, BACKDROP);
+    // Tied to the zoom, so the fog stays a depth cue instead of swallowing
+    // the maze when you pull back to look at a big one.
+    gl.uniform2f(this.uFogRange, this.distance * 0.85, this.distance * 2.5);
 
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);

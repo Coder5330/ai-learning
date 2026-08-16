@@ -143,11 +143,13 @@ class World {
         const base = (spec.phase || 0) + (i / arms) * Math.PI * 2;
         // Two blocks per arm, so an arm reads as a bar rather than a dot.
         for (const frac of [0.55, 1.0]) {
-          this.movers.push(new Mover({
+          const m = new Mover({
             kind: 'spinner', at: spec.at, arm: reach * frac,
             speed: spec.speed || 0.035, phase: base,
             radius: spec.radius || 0.3, height: spec.height,
-          }));
+          });
+          m.tint = i % 2;          // arms alternate colour
+          this.movers.push(m);
         }
       }
     }

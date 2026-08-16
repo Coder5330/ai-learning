@@ -284,7 +284,7 @@
     const yOf = v => ht - pad - (v / maxY) * (ht - pad * 2);
 
     // vertical markers where the curriculum moved up a level
-    cctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    cctx.strokeStyle = 'rgba(23,27,34,0.14)';
     cctx.lineWidth = 1;
     for (const g of state.levelChanges) {
       const i = h.findIndex(s => s.generation === g);
@@ -304,9 +304,9 @@
       cctx.stroke();
     };
 
-    line(s => s.solveRate * maxY, 'rgba(255,182,72,0.55)', 1.5);
-    line(s => s.avg, '#63a4ff', 1.5);
-    line(s => s.best, '#46e0a8', 2);
+    line(s => s.solveRate * maxY, 'rgba(249,115,22,0.75)', 1.5);
+    line(s => s.avg, '#2563eb', 1.5);
+    line(s => s.best, '#12a150', 2);
   }
 
   /** Only the most recent slice, so the graph keeps some resolution. */
@@ -338,7 +338,7 @@
     };
 
     // connections, faint — just enough to read it as a network
-    bctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    bctx.strokeStyle = 'rgba(23,27,34,0.05)';
     bctx.lineWidth = 0.5;
     for (let L = 1; L < layers.length; L++) {
       for (let j = 0; j < layers[L]; j++) {
@@ -360,8 +360,8 @@
         const m = Math.min(1, Math.abs(v));
         // positive = green, negative = blue, dim = near zero
         bctx.fillStyle = v >= 0
-          ? `rgba(70,224,168,${0.12 + m * 0.88})`
-          : `rgba(99,164,255,${0.12 + m * 0.88})`;
+          ? `rgba(18,161,80,${0.14 + m * 0.86})`
+          : `rgba(37,99,235,${0.14 + m * 0.86})`;
         bctx.beginPath();
         bctx.arc(x, y, 2.4 + m * 1.5, 0, Math.PI * 2);
         bctx.fill();

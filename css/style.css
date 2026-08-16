@@ -1,14 +1,16 @@
 :root {
-  --bg:        #0d1017;
-  --bg-panel:  #151a23;
-  --bg-card:   #1b212c;
-  --line:      #262e3b;
-  --text:      #e6ebf2;
-  --text-dim:  #8592a6;
-  --accent:    #46e0a8;
-  --accent-2:  #63a4ff;
-  --warn:      #ffb648;
-  --danger:    #ff6b6b;
+  --bg:        #e9ecf0;
+  --bg-panel:  #ffffff;
+  --bg-card:   #f4f6f9;
+  --line:      #dde2ea;
+  --text:      #171b22;
+  --text-dim:  #6a7484;
+  --accent:    #12a150;   /* the exit green */
+  --accent-2:  #2563eb;   /* the leader blue */
+  --albert:    #f97316;   /* Albert orange */
+  --warn:      #d97706;
+  --danger:    #dc2626;
+  --shadow:    0 1px 2px rgba(23, 27, 34, 0.06), 0 4px 12px rgba(23, 27, 34, 0.05);
   --radius: 10px;
 }
 
@@ -60,13 +62,28 @@ html, body {
   width: 100%;
   height: 100%;
   display: block;
-  background: #090c12;
+  background: #e0e3e8;
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   cursor: grab;
   touch-action: none;
 }
 #view:active { cursor: grabbing; }
+
+/* Darkens the corners so the arena sits in the middle of the frame instead of
+   running flat to the edges. Purely on top — never intercepts the drag. */
+.vignette {
+  position: absolute;
+  inset: 4px 24px 24px;
+  border-radius: var(--radius);
+  pointer-events: none;
+  background:
+    radial-gradient(120% 100% at 50% 40%,
+      rgba(23,27,34,0) 55%,
+      rgba(23,27,34,0.05) 82%,
+      rgba(23,27,34,0.12) 100%);
+}
 
 .hint {
   position: absolute;
@@ -103,15 +120,16 @@ html, body {
   font-size: 12.5px;
   padding: 3px 8px;
   border-radius: 5px;
-  background: #12161f;
+  background: #fff;
+  border: 1px solid var(--line);
   border-left: 3px solid var(--text-dim);
 }
 .death b { font-variant-numeric: tabular-nums; }
 .death-escaped          { border-left-color: var(--accent);  color: var(--accent); }
-.death-lava             { border-left-color: #ff6127; }
-.death-fell             { border-left-color: #8a6bff; }
+.death-lava             { border-left-color: #ea580c; }
+.death-fell             { border-left-color: #7c3aed; }
 .death-crushed          { border-left-color: var(--danger); }
-.death-gave-up          { border-left-color: #57627a; }
+.death-gave-up          { border-left-color: #94a3b8; }
 .death-ran-out-of-time  { border-left-color: var(--warn); }
 
 .toast {
@@ -119,12 +137,12 @@ html, body {
   left: 50%;
   top: 34px;
   transform: translateX(-50%);
-  background: var(--accent);
-  color: #06231a;
+  background: var(--text);
+  color: #fff;
   font-weight: 650;
   padding: 9px 18px;
   border-radius: 999px;
-  box-shadow: 0 8px 30px rgba(70, 224, 168, 0.25);
+  box-shadow: 0 8px 30px rgba(23, 27, 34, 0.25);
   animation: pop 0.3s ease-out;
 }
 @keyframes pop {
@@ -150,6 +168,7 @@ html, body {
   border-radius: var(--radius);
   padding: 13px 14px;
 }
+.card.stats { background: #fff; box-shadow: var(--shadow); }
 .card h2 {
   margin: 0 0 10px;
   font-size: 11px;
@@ -185,7 +204,8 @@ html, body {
   width: 100%;
   display: block;
   border-radius: 6px;
-  background: #12161f;
+  background: #fff;
+  border: 1px solid var(--line);
 }
 .chart-key {
   margin: 8px 0 0;
@@ -202,13 +222,13 @@ html, body {
 }
 .key-best  { background: var(--accent); }
 .key-avg   { background: var(--accent-2); }
-.key-solve { background: var(--warn); }
+.key-solve { background: var(--albert); }
 .chart-key .key:not(:first-child) { margin-left: 8px; }
 
 /* ---------- form bits ---------- */
 select {
   width: 100%;
-  background: #10141c;
+  background: #fff;
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -233,7 +253,7 @@ select:focus-visible, button:focus-visible, input:focus-visible {
   margin-bottom: 13px;
 }
 button {
-  background: #232b38;
+  background: #fff;
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -243,10 +263,10 @@ button {
   cursor: pointer;
   transition: background 0.13s, border-color 0.13s;
 }
-button:hover { background: #2c3644; }
-button.primary { background: var(--accent); color: #06231a; border-color: transparent; }
-button.primary:hover { background: #5cf0ba; }
-button.danger:hover { border-color: var(--danger); color: var(--danger); background: #232b38; }
+button:hover { background: #eef1f6; }
+button.primary { background: var(--text); color: #fff; border-color: transparent; }
+button.primary:hover { background: #2b323d; }
+button.danger:hover { border-color: var(--danger); color: var(--danger); background: #fff; }
 
 .slider { display: block; margin-bottom: 11px; }
 .slider:last-child { margin-bottom: 0; }
