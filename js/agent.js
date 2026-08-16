@@ -13,6 +13,7 @@
 function inputCount(cfg) {
   return cfg.rayCount          // wall distance, fanned out ahead
     + cfg.groundProbes * 2     // is there lava / a hole that far ahead?
+    + (cfg.trailProbes ? 4 : 0) // have I been that way before?
     + 3                        // goal: sin, cos, distance
     + 1                        // own speed
     + 3                        // own height, vertical speed, feet on ground?
@@ -80,6 +81,15 @@ class Agent {
     this.startDist = world.startDist;
     this.bestDist = this.startDist;   // closest approach to the exit so far
     this.visited = new Set([world.start.cy * world.w + world.start.cx]);
+
+    // A count per cell of how often this agent has stood there. Reused
+    // between runs rather than reallocated — 120 agents times a 31x21 grid,
+    // sixty times a second, is not the place to be making garbage.
+    const cells = world.w * world.h;
+    if (!this.trail8 || this.trail8.length !== cells) this.trail8 = new Uint8Array(cells);
+    else this.trail8.fill(0);
+    this.trail8[world.start.cy * world.w + world.start.cx] = 1;
+
     this._beginPhase(world.start.cx, world.start.cy);
 
     this.memory.fill(0);
@@ -158,7 +168,23 @@ class Agent {
       inp[k++] = t === TILE.VOID ? 1 : 0;
     }
 
-    // 3. Where the current objective is, as the crow flies. Deliberately a
+    // 3. Where I have already been. Four probes — ahead, both sides, behind —
+    //    each reporting how heavily trodden that spot is. This is what turns
+    //    aimless wandering into a search: a corridor already walked reads
+    //    differently from an untouched one, so "go back and try the other
+    //    branch" becomes learnable.
+    if (cfg.trailProbes) {
+      for (const off of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+        const a = this.angle + off;
+        const px = Math.floor(this.x + Math.cos(a) * cfg.trailReach);
+        const py = Math.floor(this.y + Math.sin(a) * cfg.trailReach);
+        if (px < 0 || py < 0 || px >= world.w || py >= world.h) { inp[k++] = 1; continue; }
+        const n = this.trail8[py * world.w + px];
+        inp[k++] = Math.min(1, n / cfg.trailFade);
+      }
+    }
+
+    // 4. Where the current objective is, as the crow flies. Deliberately a
     //    weak hint: it says "it is somewhere over there", not "go this way",
     //    and in a maze it usually points straight into a wall.
     //
@@ -174,14 +200,14 @@ class Agent {
     inp[k++] = Math.cos(rel);
     inp[k++] = Math.min(1, gdist / (world.w + world.h));
 
-    // 4. Proprioception. Without vertical speed it cannot tell rising from
+    // 5. Proprioception. Without vertical speed it cannot tell rising from
     //    falling, and jump timing becomes guesswork.
     inp[k++] = this.speed / cfg.maxSpeed;
     inp[k++] = Math.max(-1, Math.min(1, this.z));
     inp[k++] = Math.max(-1, Math.min(1, this.vz * 6));
     inp[k++] = this.grounded ? 1 : -1;
 
-    // 5. The nearest hazard, in the same shape as the goal sense.
+    // 6. The nearest hazard, in the same shape as the goal sense.
     let nearest = null, bestSq = Infinity;
     for (const m of world.movers) {
       const d = (m.x - this.x) ** 2 + (m.y - this.y) ** 2;
@@ -289,6 +315,8 @@ class Agent {
 
     // --- bookkeeping ---------------------------------------------------------
     this.visited.add(cy * world.w + cx);
+    const ti = cy * world.w + cx;
+    if (this.trail8[ti] < 255) this.trail8[ti]++;
     if (this.ticks % 4 === 0) this.trail.push(this.x, this.y, this.z);
 
     const d = world.distAt(cx, cy);

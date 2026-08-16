@@ -22,6 +22,18 @@ const CONFIG = {
   probeStart: 0.6,        // first probe, in cells
   probeStep: 0.7,         // spacing between probes
 
+  // "Have I been here already?", sampled ahead, to each side and behind.
+  //
+  // This is the difference between wandering and searching. Without it an
+  // agent has no way to tell a corridor it has already exhausted from a fresh
+  // one — the thing any person does on their second attempt at a maze — and
+  // three floats of recurrent memory cannot hold a map. With it, doubling back
+  // out of a dead end and taking the other branch becomes a behaviour that
+  // evolution can actually find.
+  trailProbes: true,
+  trailReach: 1.3,        // cells ahead of itself each probe looks
+  trailFade: 4,           // visits before a cell reads as fully explored
+
   // --- body ----------------------------------------------------------------
   radius: 0.20,           // in cells — a corridor is 1 cell wide
   maxSpeed: 0.15,         // cells per tick at full throttle
