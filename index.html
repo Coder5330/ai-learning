@@ -12,7 +12,7 @@
 
   <header class="topbar">
     <h1>AI learns to escape</h1>
-    <p class="sub">120 agents, no instructions, no map. Lava, crushers, and a long fall. Only the fastest breed.</p>
+    <p class="sub">120 agents, no instructions, no map — and a brand new maze every generation, so there is no route to memorise.</p>
   </header>
 
   <main class="stage">
@@ -73,10 +73,11 @@
     <section class="card">
       <h2>Level</h2>
       <select id="level-select"></select>
+      <p class="note" id="endless-note" hidden></p>
       <p class="note" id="level-note"></p>
       <label class="check">
         <input type="checkbox" id="opt-curriculum" checked>
-        <span>Level up automatically<em>keeps the same brains and moves on once the population can reliably escape</em></span>
+        <span>Level up automatically<em>keeps the same brains and raises the difficulty once the population can reliably escape</em></span>
       </label>
     </section>
 
@@ -137,6 +138,7 @@
 <script src="js/levels.js"></script>
 <script src="js/nn.js"></script>
 <script src="js/world.js"></script>
+<script src="js/mazegen.js"></script>
 <script src="js/agent.js"></script>
 <script src="js/ga.js"></script>
 <script src="js/render3d.js"></script>

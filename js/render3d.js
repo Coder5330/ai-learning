@@ -231,7 +231,10 @@ class Renderer3D {
 
     // --- camera ---
     this.azimuth = -Math.PI / 2 - 0.55;
-    this.elevation = 0.92;
+    // Fairly steep by default. The walls are a full unit tall (they have to
+    // be — the jump arc peaks at 0.81), so from a low angle the far half of a
+    // big maze is just wall tops.
+    this.elevation = 1.15;
     this.distance = 26;
     this.target = [0, 0, 0];
     this.follow = false;

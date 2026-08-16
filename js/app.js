@@ -13,7 +13,8 @@
 
   const state = {
     cfg: { ...CONFIG },
-    levelIndex: 0,
+    mode: 'endless',      // 'endless' | 'campaign'
+    levelIndex: 0,        // which hand-made level, in campaign mode
     world: null,
     pop: null,
     running: true,
@@ -22,6 +23,13 @@
     solvedStreak: 0,      // consecutive generations meeting the advance bar
     levelChanges: [],     // generation numbers where the level changed
     show: { trail: true },
+
+    // Endless mode: a brand new maze every single generation.
+    endless: {
+      tier: 0,
+      recent: [],         // escape rate of the last few generations
+      mazesSeen: 0,
+    },
   };
 
   const $ = id => document.getElementById(id);
@@ -37,35 +45,102 @@
 
   // ------------------------------------------------------------- lifecycle --
 
-  function loadLevel(index, keepBrains) {
-    state.levelIndex = index;
-    const level = LEVELS[index];
+  /**
+   * Swap in a world. `sel` is either a level index or the string 'endless'.
+   * `keepBrains` carries the population across instead of starting from
+   * random weights.
+   */
+  function loadLevel(sel, keepBrains) {
+    if (sel === 'endless') {
+      state.mode = 'endless';
+    } else {
+      state.mode = 'campaign';
+      state.levelIndex = sel;
+    }
+    state.solvedStreak = 0;
+
+    const level = buildLevel();
+    installWorld(level, keepBrains, true);
+
+    $('level-select').value = state.mode === 'endless' ? 'endless' : String(sel);
+  }
+
+  /** The level definition for whatever mode we are in. */
+  function buildLevel() {
+    if (state.mode === 'endless') {
+      state.endless.mazesSeen++;
+      // A fresh seed every time. This is the whole point of the mode: the
+      // population never sees the same maze twice, so nothing it inherits can
+      // be a memorised route.
+      return proceduralLevel(state.endless.tier, (Math.random() * 2 ** 31) | 0);
+    }
+    return LEVELS[state.levelIndex];
+  }
+
+  function installWorld(level, keepBrains, reframe) {
+    const previous = state.world;
     state.world = new World(level);
     state.cfg.maxTicks = tickBudget(state.world, state.cfg);
-    state.solvedStreak = 0;
 
     if (!keepBrains || !state.pop) {
       state.pop = new Population(state.cfg);
       state.levelChanges = [];
-    } else {
-      state.levelChanges.push(state.pop.generation);
     }
     state.pop.reset(state.world);
 
-    $('level-select').value = String(index);
     $('level-note').textContent = level.note;
     $('brain-note').textContent =
       `${brainLayers(state.cfg).join(' → ')}  ·  ` +
       `${state.pop.agents[0].brain.weights.length} weights  ·  ` +
       `${state.cfg.memory} outputs loop back as inputs`;
 
-    renderer.frameLevel(state.world);
+    updateEndlessNote();
+
+    // Only re-frame when the arena actually changed shape. In Endless mode the
+    // maze is replaced every generation, and snapping the camera back every
+    // few seconds would make it unwatchable.
+    const resized = !previous || previous.w !== state.world.w || previous.h !== state.world.h;
+    if (reframe || resized) renderer.frameLevel(state.world);
     resizePanels();
   }
 
-  /** Finish the current generation, breed, and maybe move up a level. */
+  function updateEndlessNote() {
+    const el = $('endless-note');
+    if (state.mode !== 'endless') { el.hidden = true; return; }
+    el.hidden = false;
+    const e = state.endless;
+    const recent = e.recent.length
+      ? `${Math.round(e.recent.reduce((a, b) => a + b, 0) / e.recent.length * 100)}%`
+      : '—';
+    el.innerHTML =
+      `<b>Tier ${e.tier + 1} of ${TIERS.length}</b> — ${describeTier(e.tier)}<br>` +
+      `${e.mazesSeen} mazes generated · escape rate on unseen mazes, last ` +
+      `${e.recent.length || 0} generations: <b>${recent}</b>`;
+  }
+
+  /** Finish the current generation, breed, and set up the next run. */
   function endGeneration() {
     const stats = state.pop.evolve();
+
+    if (state.mode === 'endless') {
+      const e = state.endless;
+      e.recent.push(stats.solveRate);
+      if (e.recent.length > 8) e.recent.shift();
+
+      // Move up only on a sustained average. A single lucky maze proves
+      // nothing — the whole point is performance across mazes, not on one.
+      const avg = e.recent.reduce((a, b) => a + b, 0) / e.recent.length;
+      if (state.cfg.autoAdvance && e.recent.length >= 6
+          && avg >= state.cfg.advanceSolveRate && e.tier < TIERS.length - 1) {
+        e.tier++;
+        e.recent = [];
+        state.levelChanges.push(state.pop.generation);
+        toast(`Tier ${e.tier + 1} — ${describeTier(e.tier)}`);
+      }
+
+      installWorld(buildLevel(), true, false);
+      return;
+    }
 
     if (stats.solveRate >= state.cfg.advanceSolveRate) state.solvedStreak++;
     else state.solvedStreak = 0;
@@ -162,6 +237,8 @@
 
     const times = pop.history.map(h => h.bestTicks).filter(v => v != null);
     $('s-fastest').textContent = times.length ? `${Math.min(...times)} ticks` : '—';
+
+    if (state.mode === 'endless') updateEndlessNote();
 
     // How the last generation ended, worst-first. On the hazard levels this is
     // the most informative thing on the page — you can watch "lava" fall and
@@ -285,13 +362,19 @@
 
   function wire() {
     const sel = $('level-select');
+    const endless = document.createElement('option');
+    endless.value = 'endless';
+    endless.textContent = '∞ · Endless — a new maze every generation';
+    sel.appendChild(endless);
     LEVELS.forEach((l, i) => {
       const o = document.createElement('option');
       o.value = String(i);
       o.textContent = l.name;
       sel.appendChild(o);
     });
-    sel.addEventListener('change', () => loadLevel(parseInt(sel.value, 10), true));
+    sel.addEventListener('change', () => {
+      loadLevel(sel.value === 'endless' ? 'endless' : parseInt(sel.value, 10), true);
+    });
 
     $('btn-play').addEventListener('click', e => {
       state.running = !state.running;
@@ -312,7 +395,8 @@
     $('btn-reset').addEventListener('click', () => {
       state.turbo = 0;
       state.levelChanges = [];
-      loadLevel(state.levelIndex, false);
+      state.endless = { tier: 0, recent: [], mazesSeen: 0 };
+      loadLevel(currentSelection(), false);
     });
 
     const depth = $('opt-depth');
@@ -323,7 +407,8 @@
       state.cfg.hiddenLayers = depth.value.split(',').map(n => parseInt(n, 10));
       state.turbo = 0;
       state.levelChanges = [];
-      loadLevel(state.levelIndex, false);
+      state.endless = { tier: 0, recent: [], mazesSeen: 0 };
+      loadLevel(currentSelection(), false);
     });
 
     const slider = (id, label, format, apply) => {
@@ -362,7 +447,7 @@
       $('opt-follow').checked = false;
       renderer.follow = false;
       renderer.azimuth = -Math.PI / 2 - 0.55;
-      renderer.elevation = 0.92;
+      renderer.elevation = 1.15;
       renderer.frameLevel(state.world);
     });
 
@@ -385,9 +470,14 @@
     $('opt-curriculum').checked = CONFIG.autoAdvance;
   }
 
+  /** Whatever the level picker is pointing at right now. */
+  function currentSelection() {
+    return state.mode === 'endless' ? 'endless' : state.levelIndex;
+  }
+
   syncSlidersFromConfig();
   wire();
-  loadLevel(0, false);
+  loadLevel('endless', false);
   requestAnimationFrame(frame);
 
   // Handle for the browser console — `maze.state.cfg`, `maze.state.pop.history`,
