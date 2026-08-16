@@ -69,16 +69,18 @@ class Agent {
     this.ticksAtBest = 0;
     this.bumps = 0;
     this.jumps = 0;
+    this.phasesDone = 0;
 
-    // Doors start shut for everyone, unless the level has none at all.
+    // Doors start shut for everyone, unless the level has none at all, and
+    // they only open once EVERY plate has been stood on.
+    this.pressed = new Set();
     this.doorsOpen = world.plates.length === 0;
     this.pressedAt = -1;
 
     this.startDist = world.startDist;
     this.bestDist = this.startDist;   // closest approach to the exit so far
-    this.startPlateDist = world.startPlateDist;
-    this.bestPlateDist = this.startPlateDist;
     this.visited = new Set([world.start.cy * world.w + world.start.cx]);
+    this._beginPhase(world.start.cx, world.start.cy);
 
     this.memory.fill(0);
     this.trail.length = 0;
@@ -89,6 +91,42 @@ class Agent {
   kill(how) {
     this.alive = false;
     this.death = how;
+  }
+
+  /**
+   * Pick the next thing to head for and start measuring progress towards it.
+   *
+   * Each plate is a phase of its own, and the exit is the last one. Progress
+   * is measured fresh from wherever the agent happens to be standing when the
+   * phase begins, so walking away from the exit to reach a switch counts as
+   * progress rather than as going backwards.
+   */
+  _beginPhase(cx, cy) {
+    const w = this.world;
+    this.objective = -1;                       // -1 means "the exit"
+    if (!this.doorsOpen) {
+      let best = Infinity;
+      for (let i = 0; i < w.plates.length; i++) {
+        if (this.pressed.has(i)) continue;
+        const d = w.distToPlate(i, cx, cy);
+        if (d < best) { best = d; this.objective = i; }
+      }
+    }
+    this.phaseStart = this._objectiveDist(cx, cy);
+    this.phaseBest = this.phaseStart;
+  }
+
+  _objectiveDist(cx, cy) {
+    return this.objective < 0
+      ? this.world.distAt(cx, cy)
+      : this.world.distToPlate(this.objective, cx, cy);
+  }
+
+  /** The cell the agent is currently trying to reach. */
+  objectiveCell() {
+    return this.objective < 0
+      ? this.world.nearestGoal(this.x, this.y)
+      : this.world.plates[this.objective];
   }
 
   /** Fill this.inputs from the world. */
@@ -128,9 +166,7 @@ class Agent {
     //    the plate, not the exit — so the same three inputs mean "find the
     //    plate" and then "find the way out", and the network never has to
     //    learn a separate sense for the sub-goal.
-    const g = (!this.doorsOpen && world.plates.length)
-      ? world.nearestPlate(this.x, this.y)
-      : world.nearestGoal(this.x, this.y);
+    const g = this.objectiveCell();
     const gdx = g.cx + 0.5 - this.x, gdy = g.cy + 0.5 - this.y;
     const gdist = Math.hypot(gdx, gdy);
     let rel = Math.atan2(gdy, gdx) - this.angle;
@@ -236,10 +272,19 @@ class Agent {
       if (dx * dx + dy * dy < rr * rr) { this.kill(DEATH.CRUSHED); return; }
     }
 
-    // --- the plate -----------------------------------------------------------
-    if (!this.doorsOpen && world.isPlate(cx, cy)) {
-      this.doorsOpen = true;
-      this.pressedAt = this.ticks;
+    // --- the plates ----------------------------------------------------------
+    if (!this.doorsOpen) {
+      const pi = world.plateIndexAt(cx, cy);
+      if (pi >= 0 && !this.pressed.has(pi)) {
+        this.pressed.add(pi);
+        this.phasesDone++;
+        if (this.pressed.size === world.plates.length) {
+          this.doorsOpen = true;
+          this.pressedAt = this.ticks;
+        }
+        this._beginPhase(cx, cy);            // on to the next switch, or the exit
+        this.ticksAtBest = this.ticks;
+      }
     }
 
     // --- bookkeeping ---------------------------------------------------------
@@ -251,12 +296,10 @@ class Agent {
       this.bestDist = d;
       this.ticksAtBest = this.ticks;
     }
-    if (!this.doorsOpen) {
-      const p = world.plateDistAt(cx, cy);
-      if (p < this.bestPlateDist) {
-        this.bestPlateDist = p;
-        this.ticksAtBest = this.ticks;
-      }
+    const od = this._objectiveDist(cx, cy);
+    if (od < this.phaseBest) {
+      this.phaseBest = od;
+      this.ticksAtBest = this.ticks;
     }
 
     if (world.isGoalCell(cx, cy) && this.grounded) {
@@ -291,16 +334,16 @@ class Agent {
     let f;
 
     if (this.world.plates.length) {
-      // Two phases, because the exit is unreachable until a plate is pressed
-      // and rewarding only "got closer to the exit" would be a sparse reward
-      // with nothing to climb. Finding the plate is worth the first half of
-      // the score; escaping afterwards is worth the second. The two halves
-      // are contiguous, so pressing the plate is never a step backwards.
-      const toPlate = (this.startPlateDist - this.bestPlateDist)
-        / Math.max(1, this.startPlateDist);
-      f = this.doorsOpen
-        ? 0.5 + 0.5 * Math.max(0, toGoal)
-        : 0.5 * Math.max(0, Math.min(1, toPlate));
+      // One phase per switch, then one for the exit. Rewarding only "got
+      // closer to the exit" would be a sparse reward with nothing to climb,
+      // because the exit is unreachable until every plate is down. Each phase
+      // owns an equal slice of the score and the slices are contiguous, so
+      // pressing a switch is never a step backwards.
+      const phases = this.world.plates.length + 1;
+      const within = this.phaseStart > 0
+        ? (this.phaseStart - this.phaseBest) / this.phaseStart
+        : 1;
+      f = (this.phasesDone + Math.max(0, Math.min(1, within))) / phases;
     } else {
       f = Math.max(0, toGoal);
     }

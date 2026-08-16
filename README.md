@@ -34,14 +34,19 @@ Difficulty then climbs through nine tiers, adding one new thing at a time, so
 that when the escape rate falls off a cliff you can see what caused it:
 
 ```
-11x9 -> 13x9 -> 13x11 +lava -> 15x11 -> 13x11 +locked exit
-     -> 15x11 -> 17x13 +crusher -> 19x13 +spinner -> 21x15
-     -> 23x15 +chaser -> 25x17
+11x9 -> 13x9 -> +lava -> 15x11 -> +locked exit -> +lava again
+     -> +crusher -> +spinner -> 21x15 -> +chaser -> 25x17
+     -> 27x19 +2 switches -> 29x19 -> 31x21 +3 switches
 ```
 
-Eleven tiers. Each new hazard arrives on its own before anything is stacked on
-top of it — the locked exit especially, since it is the first time running
-straight at the goal is the wrong move.
+Fourteen tiers, ending on a 31x21 maze with three switches, sixteen lava
+pools, spinners, crushers and a chaser — with the loops thinned out until
+there is very nearly one correct route. Nothing has reached the top yet; the
+ladder keeps going so that it can.
+
+Each new hazard arrives on its own before anything is stacked on top of it —
+the locked exit especially, since it is the first time running straight at the
+goal is the wrong move.
 
 A tier is cleared on a *sustained average* over several generations rather than
 one good maze — performance on a single maze being the thing we just stopped
@@ -180,8 +185,14 @@ the plate while the doors are shut, so the same three inputs serve both phases
 and the network needs no separate sense for the sub-goal — just one extra input
 telling it whether its doors are open.
 
+With more than one switch this generalises: each switch is a phase of its own
+and the exit is the last, every phase owning an equal slice of the score.
+Progress inside a phase is measured fresh from wherever the agent was standing
+when the phase began, so setting off *away* from the exit to reach the second
+switch counts as progress rather than as going backwards.
+
 Doors are per agent, not global. All 120 share one maze, so a global door would
-mean one lucky agent finds the plate and the other 119 stroll through having
+mean one lucky agent finds the switch and the other 119 stroll through having
 learned nothing.
 
 ---
@@ -279,7 +290,7 @@ exactly one `S` and at least one reachable `G`:
 | `.` | floor |
 | `~` | lava — ground level, but standing on it kills |
 | ` ` | void — no floor at all |
-| `P` | pressure plate — stepping on it opens every door, for that agent |
+| `P` | pressure switch — **every** switch must be pressed before the doors open |
 | `D` | door — solid until this agent has pressed a plate |
 | `S` | start (exactly one) |
 | `G` | goal |
@@ -366,6 +377,7 @@ js/agent.js              senses, movement, dying, scoring
 js/ga.js                 selection, mutation, generations
 js/render3d.js           the WebGL renderer, from scratch
 js/app.js                main loop, stats, the brain diagram
+tools/build-levels.js    regenerates the five campaign arenas
 tools/train-endless.js   headless training on procedural mazes
 tools/train.js           headless training on one fixed level
 tools/gen-maze.js        maze generator

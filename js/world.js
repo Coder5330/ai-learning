@@ -160,6 +160,12 @@ class World {
     // the second and then handed over to the first — which is how a goal it
     // cannot see becomes a gradient it can climb.
     this.dist = this._buildDistanceField(this.goals, true);
+
+    // One field per plate, not one field for all of them. With several plates
+    // an agent needs to know the way to the specific one it has not pressed
+    // yet, and a combined field would keep pointing at whichever is nearest —
+    // including ones already under its feet.
+    this.plateFields = this.plates.map(p => this._buildDistanceField([p], false));
     this.distPlate = this.plates.length
       ? this._buildDistanceField(this.plates, false)
       : null;
@@ -173,14 +179,26 @@ class World {
     // the distance to the exit at all — it is the detour out to a plate and
     // then the whole way back across to the door. Budgeting the direct
     // distance gives door levels barely half the time they need.
+    // With switches the journey is start → every plate → the exit. Estimated
+    // greedily (nearest unpressed plate each time), which is close enough to
+    // budget a run by and never shorter than the direct distance.
     this.routeLength = this.startDist;
-    if (this.plates.length && this.startPlateDist !== Infinity) {
-      let best = Infinity;
-      for (const p of this.plates) {
-        const viaPlate = this.plateDistAt(p.cx, p.cy) + this.distAt(p.cx, p.cy);
-        if (viaPlate < best) best = viaPlate;
+    if (this.plates.length && this.start) {
+      let cx = this.start.cx, cy = this.start.cy, total = 0, ok = true;
+      const left = this.plates.map((_, i) => i);
+      while (left.length) {
+        let bestI = -1, bestD = Infinity;
+        for (const i of left) {
+          const d = this.distToPlate(i, cx, cy);
+          if (d < bestD) { bestD = d; bestI = i; }
+        }
+        if (bestI < 0 || bestD === Infinity) { ok = false; break; }
+        total += bestD;
+        cx = this.plates[bestI].cx; cy = this.plates[bestI].cy;
+        left.splice(left.indexOf(bestI), 1);
       }
-      if (best !== Infinity) this.routeLength = this.startPlateDist + best;
+      const home = this.distAt(cx, cy);
+      if (ok && home !== Infinity) this.routeLength = total + home;
     }
     this.openCells = this.tiles.reduce((n, t) => n + (t === TILE.WALL ? 0 : 1), 0);
   }
@@ -212,6 +230,21 @@ class World {
     if (!this.distPlate) return Infinity;
     if (cx < 0 || cy < 0 || cx >= this.w || cy >= this.h) return Infinity;
     return this.distPlate[cy * this.w + cx];
+  }
+
+  /** Distance to one specific plate, with the doors still shut. */
+  distToPlate(i, cx, cy) {
+    const f = this.plateFields[i];
+    if (!f) return Infinity;
+    if (cx < 0 || cy < 0 || cx >= this.w || cy >= this.h) return Infinity;
+    return f[cy * this.w + cx];
+  }
+
+  plateIndexAt(cx, cy) {
+    for (let i = 0; i < this.plates.length; i++) {
+      if (this.plates[i].cx === cx && this.plates[i].cy === cy) return i;
+    }
+    return -1;
   }
 
   /** Nearest plate centre, for the "which way is the objective" sense. */
@@ -350,8 +383,11 @@ class World {
     if (this.doors.length && !this.plates.length) {
       problems.push(`${this.doors.length} door(s) but no plate to open them`);
     }
-    if (this.plates.length && this.start && this.startPlateDist === Infinity) {
-      problems.push('no plate is reachable from the start with the doors shut');
+    for (let i = 0; i < this.plates.length; i++) {
+      if (this.start && this.distToPlate(i, this.start.cx, this.start.cy) === Infinity) {
+        problems.push(`plate ${i + 1} at ${this.plates[i].cx},${this.plates[i].cy}`
+          + ' cannot be reached with the doors shut');
+      }
     }
     if (this.start && this.tileAt(this.start.cx, this.start.cy) !== TILE.FLOOR) {
       problems.push('the start is not on solid floor');

@@ -157,7 +157,7 @@ function findCrusherLanes(grid, minLength) {
  * Returns null if the attempt broke the maze (walling off a neighbour can
  * strand part of it), and the caller just goes without.
  */
-function addDoor(grid, rng) {
+function addDoor(grid, rng, plateCount) {
   const h = grid.length, w = grid[0].length;
 
   /** Flood fill from the start. `openDoors` decides whether 'D' is passable. */
@@ -214,8 +214,20 @@ function addDoor(grid, rng) {
       && Math.abs(x - 1) + Math.abs(y - 1) > (w + h) / 5);
     if (!candidates.length) continue;
 
-    const [px, py] = candidates[(rng() * candidates.length) | 0];
-    g[py][px] = 'P';
+    // Every switch has to be pressed, so they are spread apart — two switches
+    // side by side is one detour wearing a hat.
+    const want = Math.max(1, plateCount || 1);
+    const chosen = [];
+    const shuffled = candidates.slice().sort(() => rng() - 0.5);
+    for (const [x, y] of shuffled) {
+      if (chosen.length >= want) break;
+      const apart = chosen.every(([px, py]) =>
+        Math.abs(px - x) + Math.abs(py - y) > (w + h) / 4);
+      if (!apart) continue;
+      chosen.push([x, y]);
+    }
+    if (chosen.length < want) continue;
+    for (const [x, y] of chosen) g[y][x] = 'P';
     return g.map(r => r.join(''));
   }
 
@@ -287,13 +299,19 @@ const TIERS = [
   { cols: 21, rows: 15, loop: 0.16, lava: 6, crushers: 2, chaser: false, door: true, spinners: 1 },
   { cols: 23, rows: 15, loop: 0.14, lava: 7, crushers: 2, chaser: true,  door: true, spinners: 2 },
   { cols: 25, rows: 17, loop: 0.12, lava: 8, crushers: 3, chaser: true,  door: true, spinners: 2 },
+  // The deep end. Two switches instead of one, then three, and the loops
+  // thin out until there is very nearly a single correct route. Nothing has
+  // got here yet; the ladder keeps going so that it can.
+  { cols: 27, rows: 19, loop: 0.10, lava: 10, crushers: 3, chaser: true, door: true, spinners: 2, plates: 2 },
+  { cols: 29, rows: 19, loop: 0.07, lava: 13, crushers: 3, chaser: true, door: true, spinners: 3, plates: 2 },
+  { cols: 31, rows: 21, loop: 0.05, lava: 16, crushers: 4, chaser: true, door: true, spinners: 3, plates: 3 },
 ];
 
 /** A one-line description of what a tier throws at you. */
 function describeTier(i) {
   const t = TIERS[Math.min(i, TIERS.length - 1)];
   const bits = [`${t.cols}×${t.rows}`];
-  if (t.door) bits.push('a locked exit');
+  if (t.door) bits.push(t.plates > 1 ? `${t.plates} switches` : 'a locked exit');
   if (t.lava) bits.push(`${t.lava} lava`);
   if (t.spinners) bits.push(`${t.spinners} spinner${t.spinners > 1 ? 's' : ''}`);
   if (t.crushers) bits.push(`${t.crushers} crusher${t.crushers > 1 ? 's' : ''}`);
@@ -312,7 +330,7 @@ function proceduralLevel(tierIndex, seed) {
   let rows = generateMaze(t.cols, t.rows, t.loop, rng);
   // The door goes on before the lava, so lava never lands on the plate or in
   // the doorway. If sealing the goal broke the maze, carry on without one.
-  if (t.door) rows = addDoor(rows, rng) || rows;
+  if (t.door) rows = addDoor(rows, rng, t.plates || 1) || rows;
   if (t.lava) rows = addLava(rows, t.lava, rng);
 
   const movers = [];
@@ -362,7 +380,7 @@ function proceduralLevel(tierIndex, seed) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    makeRng, generateMaze, addLava, findCrusherLanes,
+    makeRng, generateMaze, addLava, findCrusherLanes, addDoor, addSpinner,
     proceduralLevel, describeTier, TIERS,
   };
 }
