@@ -80,7 +80,10 @@ const CONFIG = {
  * make the big arenas impossible or the small ones tediously slow.
  */
 function tickBudget(world, cfg) {
-  return Math.round(world.startDist / cfg.maxSpeed * 2.2) + 150;
+  // routeLength, not startDist — on a level with a locked exit the journey is
+  // start → plate → door → exit, which can be more than twice as far as the
+  // exit looks.
+  return Math.round(world.routeLength / cfg.maxSpeed * 2.2) + 150;
 }
 
 if (typeof module !== 'undefined' && module.exports) {

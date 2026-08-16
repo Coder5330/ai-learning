@@ -232,6 +232,11 @@ const TIERS = [
   { cols: 13, rows: 9,  loop: 0.26, lava: 0, crushers: 0, chaser: false, door: false },
   { cols: 13, rows: 11, loop: 0.24, lava: 2, crushers: 0, chaser: false, door: false },
   { cols: 15, rows: 11, loop: 0.22, lava: 3, crushers: 0, chaser: false, door: false },
+  // The door arrives alone, in a small maze with nothing else in it. A locked
+  // exit is a much bigger conceptual jump than another lava pool — it is the
+  // first time running at the goal is the wrong move — so it gets a tier to
+  // itself before anything is stacked on top.
+  { cols: 13, rows: 11, loop: 0.26, lava: 0, crushers: 0, chaser: false, door: true },
   { cols: 15, rows: 11, loop: 0.22, lava: 2, crushers: 0, chaser: false, door: true },
   { cols: 17, rows: 13, loop: 0.20, lava: 4, crushers: 1, chaser: false, door: true },
   { cols: 19, rows: 13, loop: 0.18, lava: 5, crushers: 1, chaser: false, door: true },

@@ -130,6 +130,20 @@ class World {
     this.startPlateDist = this.start && this.distPlate
       ? this.distPlate[this.start.cy * this.w + this.start.cx]
       : Infinity;
+
+    // How far an agent actually has to walk. With a locked exit that is not
+    // the distance to the exit at all — it is the detour out to a plate and
+    // then the whole way back across to the door. Budgeting the direct
+    // distance gives door levels barely half the time they need.
+    this.routeLength = this.startDist;
+    if (this.plates.length && this.startPlateDist !== Infinity) {
+      let best = Infinity;
+      for (const p of this.plates) {
+        const viaPlate = this.plateDistAt(p.cx, p.cy) + this.distAt(p.cx, p.cy);
+        if (viaPlate < best) best = viaPlate;
+      }
+      if (best !== Infinity) this.routeLength = this.startPlateDist + best;
+    }
     this.openCells = this.tiles.reduce((n, t) => n + (t === TILE.WALL ? 0 : 1), 0);
   }
 
