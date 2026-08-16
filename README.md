@@ -110,20 +110,29 @@ crossover disabled. Two networks can produce the same behaviour using
 completely different internal wiring, so a child built half from each inherits
 neither. Set `crossoverRate` in `js/config.js` if you want to watch it fail.
 
-**Depth is slow to start and then wins.** On the small arenas a single hidden
-layer learns faster. On the big maze it never finishes at all. Over 150
-generations, two runs each:
+**Memory earns its place. Depth, so far, does not.** The default brain is five
+layers because that is what was asked for, and it works — but on the level I
+can measure it against, a single hidden layer beats it outright. Level 8, 150
+generations, three runs each:
 
-| brain | first escape | best fitness reached |
-|---|---|---|
-| 5 layers + memory | generation 134 | **1.57** |
-| 5 layers, no memory | never | 1.13 |
-| 3 layers + memory | never | 0.70 |
-| 3 layers, no memory | never | 0.72 |
+| brain | first escape | final escape % | best fitness |
+|---|---|---|---|
+| 3 layers + memory | generation 33 (3/3 runs) | **29%** | **3.12** |
+| 3 layers, no memory | generation 31 (3/3) | 20% | 3.02 |
+| 5 layers + memory | generation 60 (3/3) | 19% | 2.98 |
+| 5 layers, no memory | generation 108 (2/3) | 7% | 2.27 |
 
-Only the deep brain ever got out. Two runs per row is a small sample and the
-first-escape numbers are noisy, but the fitness gap is wide and consistent.
-There is a dropdown under **Brain** to switch depth and watch it yourself.
+Two things to take from that. The recurrent memory is worth having at either
+depth — dropping it roughly halves the escape rate and, at five layers, made
+one run in three fail to escape at all. Depth costs a lot of early progress and
+there is no level here where it has been shown to pay that back. The intuition
+that deeper nets should win on harder mazes is reasonable, and it is what an
+earlier 2D version of this project appeared to show, but that result did not
+survive the move to jumping and hazards, so it is not claimed here.
+
+The dropdown under **Brain** switches depth live, and `node tools/train.js 8
+150 20` reproduces the third row. If you want the fastest learner rather than
+the deepest one, use it.
 
 **Punishing death made things worse.** An explicit fitness penalty for dying in
 lava made the population hug the far wall and refuse to approach the hazard at

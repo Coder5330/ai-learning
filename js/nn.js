@@ -6,8 +6,8 @@
  *
  * The default brain is 5 layers deep:
  *
- *     inputs ──▶ 16 ──▶ 16 ──▶ 12 ──▶ outputs
- *      (20)     tanh   tanh   tanh     tanh
+ *     inputs ──▶ 20 ──▶ 16 ──▶ 12 ──▶ outputs      1298 weights
+ *      (33)     tanh   tanh   tanh      (6)
  *                                        │
  *                       memory ◀─────────┘
  *
@@ -21,11 +21,16 @@
  *
  * 2. Depth is not free under evolution. There is no backprop here, so a
  *    mutation to a layer-1 weight has to survive being reshaped by three more
- *    layers before it shows up as behaviour, which makes early progress
- *    slower than a shallow net. It pays off later: the deep brains keep
- *    improving on the big mazes well past the point where a single hidden
- *    layer flattens out. Layer sizes are a config value — set `hiddenLayers`
- *    to [16] in js/app.js and you can watch the difference.
+ *    layers before it shows up as behaviour, which makes early progress much
+ *    slower than a shallow net.
+ *
+ *    Measured on level 8, a single hidden layer reaches its first escape at
+ *    generation 33 against generation 60 for this five-layer stack, and ends
+ *    ahead on escape rate too. No level in this project has yet shown depth
+ *    paying that cost back, so treat five layers as the interesting default
+ *    rather than the optimal one — `hiddenLayers` in js/config.js and the
+ *    dropdown in the page both change it, and tools/train.js will tell you
+ *    what happened.
  */
 
 /** Total weights (and biases) needed for a given layer stack. */
