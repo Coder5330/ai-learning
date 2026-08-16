@@ -234,9 +234,13 @@ class Agent {
     if (world.isGoalCell(cx, cy) && this.grounded) {
       this.reachedGoal = true;
       this.kill(DEATH.ESCAPED);
-    } else if (this.ticks - this.ticksAtBest > cfg.stagnationTicks) {
-      // Wedged in a corner or driving in circles. Cutting it loose here is
-      // purely a speed optimisation — its score is already locked in.
+    } else if (cfg.stagnationTicks > 0
+        && this.ticks - this.ticksAtBest > cfg.stagnationTicks) {
+      // Off by default. It was a speed optimisation — an agent that has not
+      // got closer in a while is usually wedged in a corner — but it also
+      // quietly binned anyone doubling back out of a long dead end, which is
+      // exactly the behaviour a maze needs. Nobody gives up now; they run
+      // until the clock does.
       this.kill(DEATH.STUCK);
     }
   }

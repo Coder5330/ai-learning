@@ -33,6 +33,15 @@
   };
 
   const $ = id => document.getElementById(id);
+
+  const shattered = new WeakSet();
+  const DEATH_COLOUR = {
+    [DEATH.LAVA]:    [1.00, 0.45, 0.12],
+    [DEATH.FELL]:    [0.60, 0.45, 1.00],
+    [DEATH.CRUSHED]: [1.00, 0.30, 0.36],
+    [DEATH.TIMEOUT]: [0.55, 0.60, 0.72],
+    default:         [0.45, 0.62, 0.95],
+  };
   const chart = $('chart'), cctx = chart.getContext('2d');
   const brainview = $('brainview'), bctx = brainview.getContext('2d');
 
@@ -163,6 +172,17 @@
     if (state.running && !state.turbo) {
       for (let i = 0; i < state.speed; i++) {
         if (!state.pop.step()) { endGeneration(); break; }
+      }
+    }
+
+    // Blow up anyone who died since the last frame. Agent objects are rebuilt
+    // every generation, so a WeakSet is enough to remember who has already
+    // gone off without any bookkeeping of its own.
+    if (!state.turbo) {
+      for (const a of state.pop.agents) {
+        if (a.alive || a.reachedGoal || shattered.has(a)) continue;
+        shattered.add(a);
+        renderer.shatter(a, DEATH_COLOUR[a.death] || DEATH_COLOUR.default);
       }
     }
 

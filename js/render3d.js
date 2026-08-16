@@ -75,6 +75,7 @@ in vec3 iOffset;
 in vec3 iScale;
 in vec3 iColor;
 in float iGlow;
+in float iYaw;
 
 uniform mat4 uViewProj;
 
@@ -83,10 +84,19 @@ out vec3 vColor;
 out float vGlow;
 out vec3 vWorld;
 
+// Spin a point about the Y axis. Everything in this scene is a box, so a
+// single yaw is all the rotation anyone needs — Albert has to face where he is
+// going, and the shards need to tumble.
+vec3 spinY(vec3 p, float a) {
+  float c = cos(a), s = sin(a);
+  return vec3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c);
+}
+
 void main() {
-  vec3 world = aPos * iScale + iOffset;
+  vec3 local = spinY(aPos * iScale, iYaw);
+  vec3 world = local + iOffset;
   vWorld  = world;
-  vNormal = aNormal;
+  vNormal = spinY(aNormal, iYaw);
   vColor  = iColor;
   vGlow   = iGlow;
   gl_Position = uViewProj * vec4(world, 1.0);
@@ -167,9 +177,12 @@ const COLOUR = {
   crusher:   [0.95, 0.30, 0.36],
   chaser:    [1.00, 0.16, 0.42],
   trail:     [0.70, 0.78, 0.95],
+  eye:       [1.00, 1.00, 1.00],
+  pupil:     [0.06, 0.08, 0.13],
+  foot:      [0.18, 0.30, 0.52],
 };
 
-const FLOATS_PER_INSTANCE = 10;
+const FLOATS_PER_INSTANCE = 11;
 
 class Renderer3D {
   constructor(canvas) {
@@ -219,11 +232,18 @@ class Renderer3D {
     attrib('iScale', 3, 12);
     attrib('iColor', 3, 24);
     attrib('iGlow', 1, 36);
+    attrib('iYaw', 1, 40);
 
     gl.bindVertexArray(null);
 
-    this.data = new Float32Array(4096 * FLOATS_PER_INSTANCE);
+    this.data = new Float32Array(8192 * FLOATS_PER_INSTANCE);
     this.count = 0;
+
+    // Debris from agents that have died. Purely cosmetic — the simulation
+    // neither knows nor cares that these exist.
+    this.shards = [];
+    this.maxShards = 900;
+    this._lastTime = 0;
 
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -307,7 +327,7 @@ class Renderer3D {
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  _box(x, y, z, sx, sy, sz, colour, glow) {
+  _box(x, y, z, sx, sy, sz, colour, glow, yaw) {
     const need = (this.count + 1) * FLOATS_PER_INSTANCE;
     if (need > this.data.length) {
       const bigger = new Float32Array(this.data.length * 2);
@@ -320,15 +340,104 @@ class Renderer3D {
     d[i++] = sx; d[i++] = sy; d[i++] = sz;
     d[i++] = colour[0]; d[i++] = colour[1]; d[i++] = colour[2];
     d[i++] = glow || 0;
+    d[i++] = yaw || 0;
     this.count++;
   }
 
   /**
+   * A box positioned in an agent's local frame: +X is the way it is facing,
+   * +Y is up, +Z is its left. Saves doing the trigonometry at every call site.
+   */
+  _part(ax, ay, az, yaw, lx, ly, lz, sx, sy, sz, colour, glow) {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    this._box(
+      ax + lx * c + lz * s,
+      ay + ly,
+      az - lx * s + lz * c,
+      sx, sy, sz, colour, glow, yaw
+    );
+  }
+
+  /**
+   * Albert: a body, a head, two eyes that face the way he is going, and two
+   * feet. Seven boxes each — with 120 of him that is under a thousand extra
+   * instances, which costs nothing when they all go in one draw call.
+   */
+  _drawAlbert(a, colour, glow, scale) {
+    const yaw = -a.angle;
+    const x = a.x, y = a.z, z = a.y;
+    const S = scale;
+
+    // A little squash-and-stretch while airborne, so a jump reads as a jump
+    // even in a crowd of a hundred others.
+    const air = Math.max(-1, Math.min(1, a.vz * 8));
+    const stretch = 1 + air * 0.18;
+    const squash = 1 - air * 0.10;
+
+    // Body slightly wider than the head, so there is a shoulder line and he
+    // does not read as one undifferentiated brick.
+    this._part(x, y, z, yaw, 0, 0.12 * S * stretch, 0,
+      0.29 * S * squash, 0.22 * S * stretch, 0.31 * S * squash, colour, glow);
+    this._part(x, y, z, yaw, 0.01, 0.33 * S * stretch, 0,
+      0.22 * S * squash, 0.20 * S, 0.24 * S * squash, colour, glow);
+
+    const eyeY = 0.35 * S * stretch;
+    for (const side of [-1, 1]) {
+      this._part(x, y, z, yaw, 0.10 * S, eyeY, side * 0.07 * S,
+        0.07 * S, 0.09 * S, 0.06 * S, COLOUR.eye, 0.25);
+      this._part(x, y, z, yaw, 0.13 * S, eyeY, side * 0.075 * S,
+        0.035 * S, 0.045 * S, 0.035 * S, COLOUR.pupil, 0);
+      this._part(x, y, z, yaw, 0.02 * S, 0.025 * S, side * 0.085 * S,
+        0.11 * S, 0.05 * S, 0.09 * S, COLOUR.foot, 0);
+    }
+  }
+
+  /**
+   * Blow an agent into pieces. Called once, the moment it dies — there is no
+   * quiet fading away and no standing around looking defeated.
+   */
+  shatter(a, colour) {
+    const pieces = 11;
+    for (let i = 0; i < pieces; i++) {
+      if (this.shards.length >= this.maxShards) break;
+      const ang = Math.random() * Math.PI * 2;
+      const speed = 0.35 + Math.random() * 1.5;
+      this.shards.push({
+        x: a.x, y: a.z + 0.18 + Math.random() * 0.2, z: a.y,
+        vx: Math.cos(ang) * speed,
+        vy: 1.1 + Math.random() * 2.4,
+        vz: Math.sin(ang) * speed,
+        yaw: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 12,
+        size: 0.05 + Math.random() * 0.07,
+        life: 1,
+        colour: colour || COLOUR.agent,
+      });
+    }
+  }
+
+  _drawShards(time) {
+    const dt = Math.min(0.05, this._lastTime ? time - this._lastTime : 0.016);
+    this._lastTime = time;
+
+    for (let i = this.shards.length - 1; i >= 0; i--) {
+      const p = this.shards[i];
+      p.vy -= 9.0 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.yaw += p.spin * dt;
+      p.life -= dt * 0.85;
+      if (p.life <= 0 || p.y < -4) { this.shards.splice(i, 1); continue; }
+      const s = p.size * Math.max(0.2, p.life);
+      this._box(p.x, p.y, p.z, s, s, s, p.colour, 0.3, p.yaw);
+    }
+  }
+
+  /**
    * @param world   the World being run
-   * @param agents  every agent, drawn as a cube
+   * @param agents  every agent
    * @param leader  the one to highlight (and follow, if follow is on)
    * @param show    { trail: bool }
-   * @param time    seconds, for the lava animation
+   * @param time    seconds, for the lava animation and the shards
    */
   render(world, agents, leader, show, time) {
     const gl = this.gl;
@@ -374,19 +483,21 @@ class Renderer3D {
       this._box(m.x, m.height / 2, m.y, m.radius * 2, m.height, m.radius * 2, c, 0.5);
     }
 
-    // --- agents ---
+    // --- Albert, one hundred and twenty times over ---
     for (const a of agents) {
       if (a === leader) continue;
-      let c = COLOUR.agent, s = 0.32, glow = 0;
-      if (a.reachedGoal) { c = COLOUR.escaped; glow = 0.6; }
-      else if (!a.alive) { c = COLOUR.dead; s = 0.20; }
-      this._box(a.x, a.z + s / 2, a.y, s, s, s, c, glow);
+      if (!a.alive && !a.reachedGoal) continue;   // the dead are shards now
+      this._drawAlbert(a, a.reachedGoal ? COLOUR.escaped : COLOUR.agent,
+        a.reachedGoal ? 0.5 : 0, 1);
     }
     if (leader) {
-      this._box(leader.x, leader.z + 0.21, leader.y, 0.42, 0.42, 0.42, COLOUR.leader, 0.25);
-      // a little marker floating above, so you can pick it out of the crowd
-      this._box(leader.x, leader.z + 0.85, leader.y, 0.12, 0.12, 0.12, COLOUR.leader, 0.8);
+      this._drawAlbert(leader, COLOUR.leader, 0.2, 1.18);
+      // a little marker floating above, so you can pick him out of the crowd
+      this._box(leader.x, leader.z + 1.0, leader.y, 0.1, 0.1, 0.1, COLOUR.leader, 0.9,
+        time * 2);
     }
+
+    this._drawShards(time);
 
     // --- camera ---
     if (this.follow && leader) {

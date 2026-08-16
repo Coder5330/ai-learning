@@ -36,7 +36,11 @@ const CONFIG = {
   jumpImpulse: 0.18,
   fallDeathDepth: -3,     // fall this far below the floor and you are gone
 
-  stagnationTicks: 140,   // give up on a run that hasn't got closer in this long
+  // 0 disables it. Culling agents that had not improved in a while was a
+  // speed trick, but backing out of a deep dead end looks exactly like being
+  // stuck right up until the moment it pays off, so it was also throwing away
+  // the one behaviour a maze rewards. Nobody gives up now.
+  stagnationTicks: 0,
 
   // --- evolution -----------------------------------------------------------
   popSize: 120,
